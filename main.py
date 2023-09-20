@@ -1,12 +1,13 @@
 import copy
-import dataclasses
 
 import numpy as np
-from typing import Optional, List
+from typing import Optional
 import pprint
 
 from actions import DurakAction
 from agents import RandomPlayer, HumanPlayer
+from game_state import ObservableDurakGameState
+
 
 class DurakDeck:
 
@@ -36,23 +37,10 @@ class DurakDeck:
         return str(self.deck)
 
 
-@dataclasses.dataclass
-class ObservableDurakGameState:
-    """
-    DurakGameState is a dataclass that stores the state of the game.
-    """
-    hand: List[tuple]  # list of cards in hand
-    visible_card: tuple  # the visible card on the table determining the trump suit
-    attack_table: List[tuple]  # list of attacking cards on the table
-    defend_table: List[tuple]  # list of defending cards on the table
-    num_cards_left_in_deck: int  # number of cards left in the deck
-    num_cards_left_in_opponent_hands: List[int]  # number of cards left in the opponent's hand
-    graveyard: List[tuple]  # list of cards in the graveyard
-
-
 class DurakGame:
 
     def __init__(self, allow_step_back=False):
+        self.np_random = None
         self.defender_has_taken = None
         self.lowest_card = None  # lowest card rank in the deck
         self.num_players = None  # number of players
@@ -73,9 +61,10 @@ class DurakGame:
         self.graveyard = None  # list of cards in the graveyard
 
     def configure(self, game_config):
-        self.num_players = game_config['game_num_players']
-        self.lowest_card = game_config['lowest_card']
-        self.player_agents = [RandomPlayer, RandomPlayer, RandomPlayer]
+        self.num_players = game_config.get('game_num_players', 3)
+        self.lowest_card = game_config.get('lowest_card', 6)
+        self.np_random = np.random.RandomState(game_config.get('seed', 0))
+        self.player_agents = [RandomPlayer, RandomPlayer, HumanPlayer]
 
     def _determine_init_attacker(self):
         """
@@ -127,6 +116,7 @@ class DurakGame:
             num_cards_left_in_deck=len(self.deck.deck),
             num_cards_left_in_opponent_hands=[len(p.hand) for p in self.players if p != player],
             graveyard=self.graveyard,
+            is_done=self.is_done,
         )
 
     def step(self):
@@ -306,6 +296,7 @@ class DurakGame:
                     pass_actions = player.can_pass_with(self.attack_table[-1])
                     for card in pass_actions:
                         legal_actions.append(DurakAction.pass_with_card_id_from_card(card))
+
         elif player_id not in [((self.defender + 1) % self.num_players),
                                ((self.defender - 1) % self.num_players)]:  # only neighbors can attack
             legal_actions.append(DurakAction.stop_attacking_action())
