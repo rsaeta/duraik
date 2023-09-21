@@ -45,6 +45,9 @@ class MCTSNode:
     def get_ucb(self, c=1.414):
         return self.get_value() + c * np.sqrt(np.log(self.parent.visits) / (self.visits + 1e-6))
 
+    def get_best_action(self):
+        return max(self.children.items(), key=lambda x: x[1].get_value())[0]
+
     def get_best_child(self):
         return max(self.children.values(), key=lambda x: x.get_ucb())
 
@@ -111,6 +114,7 @@ class MCTSPlayer(DurakPlayer):
             node = self.get_rollout_node(root)
             action = np.random.choice(node.state.available_actions)
             self.rollout(node, action)
+
         """
         sim_scores = np.zeros(len(actions))
         sim_counts = np.zeros(len(actions))
@@ -121,7 +125,7 @@ class MCTSPlayer(DurakPlayer):
         sim_scores /= (sim_counts+1e-6)
         return actions[np.argmax(sim_scores)]
         """
-
+        return root.get_best_action()
 
 
 def shuffle_for_random_deck(deck, visible_card):

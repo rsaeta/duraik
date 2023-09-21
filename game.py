@@ -149,9 +149,9 @@ class DurakGame:
             self.players[self.defender].add_card(card)
         self.attack_table = []
         self.defend_table = []
-        self.attackers = [(self.defender+1) % self.num_players]
+        self.attackers = [(self.defender + 1) % self.num_players]
         self.player_taking_action = self.attackers[0]
-        self.defender = (self.player_taking_action+1) % self.num_players
+        self.defender = (self.player_taking_action + 1) % self.num_players
         self.stopped_attacking = []
 
     def _clear_table(self):
@@ -201,9 +201,10 @@ class DurakGame:
         prev_state = self.get_whole_state()
         reward = 0
         round_over = False
-        if self.player_taking_action != player_id:
-            raise ValueError('Player {} cannot take action, it is player {}\'s turn'.format(player_id,
-                                                                                            self.player_taking_action))
+        if self.player_taking_action != player_id and not DurakAction.is_noop(action_id):
+            raise ValueError('Player {} cannot take action {}, it is player {}\'s turn'.format(player_id,
+                                                                                               action_id,
+                                                                                               self.player_taking_action))
         if DurakAction.is_attack(action_id):
             if not self.defender_has_taken:
                 self.stopped_attacking = []
@@ -281,10 +282,10 @@ class DurakGame:
             self.is_done = self._is_game_over()
             if not self.is_done and len(self.deck.deck) == 0:
                 while len(self.players[self.player_taking_action].hand) == 0:
-                    self.player_taking_action = (self.player_taking_action+1) % self.num_players
-                self.defender = (self.player_taking_action+1) % self.num_players
+                    self.player_taking_action = (self.player_taking_action + 1) % self.num_players
+                self.defender = (self.player_taking_action + 1) % self.num_players
                 while len(self.players[self.defender].hand) == 0:
-                    self.defender = (self.defender+1) % self.num_players
+                    self.defender = (self.defender + 1) % self.num_players
             hand_sizes = list(map(len, [player.hand for player in self.players]))
             if hand_sizes[player_id] == 0:
                 reward = 1

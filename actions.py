@@ -36,6 +36,10 @@ class DurakAction:
         return action_id == DurakAction.stop_attacking_action()
 
     @staticmethod
+    def is_noop(action_id: int) -> bool:
+        return action_id == DurakAction.noop_action()
+
+    @staticmethod
     def ext_from_card(card):
         suit, rank = card
         return (15 - DurakAction.lowest_card) * ['S', 'H', 'D', 'C'].index(suit) + (rank - DurakAction.lowest_card)
@@ -77,14 +81,18 @@ class DurakAction:
     @staticmethod
     def num_actions() -> int:
         # 8 actions per rank, 4 suits attack/defend, take, stop_attacking, pass_with_card
-        return DurakAction.n(4)*3+2
+        return DurakAction.n(4)*3+3
 
     @staticmethod
     def take_action() -> int:
-        return DurakAction.num_actions() - 2
+        return DurakAction.num_actions() - 3
 
     @staticmethod
     def stop_attacking_action() -> int:
+        return DurakAction.num_actions() - 2
+
+    @staticmethod
+    def noop_action() -> int:
         return DurakAction.num_actions() - 1
 
     @staticmethod
@@ -99,5 +107,7 @@ class DurakAction:
             return 'take'
         elif DurakAction.is_stop_attacking(action_id):
             return 'stop_attacking'
+        elif DurakAction.is_noop(action_id):
+            return 'noop'
         else:
             raise ValueError('Invalid action_id {}'.format(action_id))
