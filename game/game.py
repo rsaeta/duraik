@@ -2,10 +2,9 @@ import copy
 
 import numpy as np
 from typing import Optional
-import pprint
 
-from actions import DurakAction
-from game_state import ObservableDurakGameState, GameTransition
+from .actions import DurakAction
+from .game_state import ObservableDurakGameState, GameTransition
 
 
 class DurakDeck:

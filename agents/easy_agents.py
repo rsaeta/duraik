@@ -5,10 +5,7 @@ import torch
 from torch import nn
 
 import numpy as np
-
-from game_state import ObservableDurakGameState, GameTransition
-from actions import DurakAction
-from game import DurakGame, DurakDeck
+from game import (ObservableDurakGameState, GameTransition, DurakAction)
 
 
 class DurakPlayer:
@@ -26,13 +23,13 @@ class DurakPlayer:
 
     def can_defend_with(self, card, trump_suit):
         suit, rank = card
-        defendable_cards = []
+        defensible_cards = []
         for s, r in self.hand:
             if s == suit and r > rank:
-                defendable_cards.append((s, r))
+                defensible_cards.append((s, r))
             if s == trump_suit and suit != trump_suit:
-                defendable_cards.append((s, r))
-        return defendable_cards
+                defensible_cards.append((s, r))
+        return defensible_cards
 
     def can_pass_with(self, card):
         suit, rank = card

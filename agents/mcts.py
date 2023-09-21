@@ -4,7 +4,7 @@ from typing import List
 import numpy as np
 
 from agents.easy_agents import DurakPlayer, RandomPlayer
-from game_state import ObservableDurakGameState
+from game.game_state import ObservableDurakGameState
 from game import DurakGame, DurakDeck
 
 
