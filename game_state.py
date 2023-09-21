@@ -22,6 +22,7 @@ class ObservableDurakGameState:
     acting_player: int  # acting player
     defender_has_taken: bool  # whether the defender has taken the cards
     stopped_attacking: List[int]  # list of players who have stopped attacking
+    available_actions: List[int]  # list of available actions
 
     def __str__(self):
         return f"""

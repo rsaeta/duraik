@@ -107,6 +107,7 @@ class DurakGame:
         :return: ObservableDurakGameState
         """
         player = self.players[player_id]
+        actions = self.get_legal_actions(player_id)
         return copy.deepcopy(ObservableDurakGameState(
             player_id=player_id,
             hand=player.hand,
@@ -123,6 +124,7 @@ class DurakGame:
             acting_player=self.player_taking_action,
             defender_has_taken=self.defender_has_taken,
             stopped_attacking=self.stopped_attacking,
+            available_actions=actions,
         ))
 
     def step(self) -> GameTransition:

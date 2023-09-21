@@ -2,7 +2,8 @@ from game import DurakGame
 from agents import RandomPlayer, MCTSPlayer
 
 
-def main():
+def main(*args, **kwargs):
+    print(args, kwargs)
     gconfig = {
         'game_num_players': 3,
         'lowest_card': 6,
