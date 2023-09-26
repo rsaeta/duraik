@@ -1,5 +1,5 @@
 from game import DurakGame
-from agents import RandomPlayer, MCTSPlayer
+from agents import RandomPlayer, MCTSPlayer, HumanPlayer
 
 
 def main(*args, **kwargs):
@@ -7,14 +7,15 @@ def main(*args, **kwargs):
     gconfig = {
         'game_num_players': 3,
         'lowest_card': 6,
-        'agents': [RandomPlayer, MCTSPlayer, RandomPlayer],
+        'agents': [RandomPlayer, RandomPlayer, RandomPlayer],
     }
     game = DurakGame()
     game.configure(gconfig)
     game.init_game()
     while not game.is_done:
-        game.step()
+        transition = game.step()
     print(game.players)
+    print(transition)
 
 
 if __name__ == '__main__':

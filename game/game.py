@@ -1,7 +1,7 @@
 import copy
 
 import numpy as np
-from typing import Optional
+from typing import Optional, List
 
 from .actions import DurakAction
 from .game_state import ObservableDurakGameState, GameTransition
@@ -38,25 +38,24 @@ class DurakDeck:
 class DurakGame:
 
     def __init__(self, allow_step_back=False):
-        self.np_random = None
-        self.defender_has_taken = None
-        self.lowest_card = None  # lowest card rank in the deck
-        self.num_players = None  # number of players
-        self.allow_step_back = allow_step_back  # whether to allow step_back
+        self.defender_has_taken: bool = False
+        self.lowest_card: Optional[int] = None  # lowest card rank in the deck
+        self.num_players: Optional[int] = None  # number of players
+        self.allow_step_back: bool = allow_step_back  # whether to allow step_back
         self.np_random = np.random.RandomState()  # numpy random generator
         self.deck: Optional[DurakDeck] = None  # deck of cards
-        self.visible_card = None  # the visible card on the table determining the trump suit
-        self.attackers = None  # the player id of the attacker
-        self.defender = None  # the player id of the defender
+        self.visible_card: Optional[tuple] = None  # the visible card on the table determining the trump suit
+        self.attackers: Optional[List[int]] = None  # the player id of the attacker
+        self.defender: Optional[int] = None  # the player id of the defender
         self.player_agents = None  # list of player agent classes
-        self.players = None  # list of players
-        self.in_players = None  # list of players still in the game
-        self.attack_table = None  # list of attacking cards on the table
-        self.defend_table = None  # list of defending cards on the table
-        self.stopped_attacking = None  # whether the attacker has passed
-        self.player_taking_action = None  # the player taking action
-        self.is_done = False  # whether the game is done
-        self.graveyard = None  # list of cards in the graveyard
+        self.players: Optional[List] = None  # list of players
+        self.in_players: Optional[List[int]] = None  # list of players still in the game
+        self.attack_table: Optional[List[tuple]] = None  # list of attacking cards on the table
+        self.defend_table: Optional[List[tuple]] = None  # list of defending cards on the table
+        self.stopped_attacking: Optional[List[int]] = None  # whether the attacker has passed
+        self.player_taking_action: Optional[int] = None  # the player taking action
+        self.is_done: bool = False  # whether the game is done
+        self.graveyard: Optional[List[tuple]] = None  # list of cards in the graveyard
 
     def configure(self, game_config):
         self.num_players = game_config.get('game_num_players', 3)
@@ -107,31 +106,30 @@ class DurakGame:
         """
         player = self.players[player_id]
         actions = self.get_legal_actions(player_id)
-        return copy.deepcopy(ObservableDurakGameState(
+        return ObservableDurakGameState(
             player_id=player_id,
-            hand=player.hand,
+            hand=tuple(player.hand),
             visible_card=self.visible_card,
-            attack_table=self.attack_table,
-            defend_table=self.defend_table,
+            attack_table=tuple(self.attack_table),
+            defend_table=tuple(self.defend_table),
             num_cards_left_in_deck=len(self.deck.deck),
-            num_cards_in_hands=[len(p.hand) for p in self.players],
-            graveyard=self.graveyard,
+            num_cards_in_hands=tuple(len(p.hand) for p in self.players),
+            graveyard=tuple(self.graveyard),
             is_done=self.is_done,
             lowest_rank=self.lowest_card,
-            attackers=self.attackers,
+            attackers=tuple(self.attackers),
             defender=self.defender,
             acting_player=self.player_taking_action,
             defender_has_taken=self.defender_has_taken,
-            stopped_attacking=self.stopped_attacking,
-            available_actions=actions,
-        ))
+            stopped_attacking=tuple(self.stopped_attacking),
+            available_actions=tuple(actions),
+        )
 
     def step(self) -> GameTransition:
         player_id = self.player_taking_action
         actions = self.get_legal_actions(player_id)
         player = self.players[player_id]
         action = player.choose_action(self.get_observable_state(player_id), actions)
-        # f'Step: {player_id} ({DurakAction.action_to_string(action)})')
         transition = self.do_step(player_id, action)
         player.observe(transition)
         return transition
@@ -171,7 +169,6 @@ class DurakGame:
     def _is_game_over(self):
         """
         Helper function to check if the game is over.
-        :return:
         """
         if len(self.deck.deck) == 0:
             players_with_hands_left = [player for player in self.players if len(player.hand) > 0]
@@ -189,6 +186,70 @@ class DurakGame:
     def get_potential_attackers(self, defender_id):
         return [(defender_id + 1) % self.num_players, (defender_id - 1) % self.num_players]
 
+    def _handle_attack_action(self, player_id: int, action_id: int):
+        if not self.defender_has_taken:
+            self.stopped_attacking = []
+        if player_id not in self.attackers:
+            self.attackers.append(player_id)
+        card = DurakAction.card_from_attack_id(action_id)
+        self.players[player_id].remove_card(card)
+        self.attack_table.append(card)
+
+    def _handle_defend_action(self, player_id: int, action_id: int):
+        self.stopped_attacking = []
+        card = DurakAction.card_from_defend_id(action_id)
+        self.players[player_id].remove_card(card)
+        self.defend_table.append(card)
+        if len(self.attack_table) == len(self.defend_table):
+            self.player_taking_action = self.attackers[-1]
+
+    def _handle_pass_with_card_action(self, player_id: int, action_id: int):
+        self.stopped_attacking = []
+        card = DurakAction.card_from_pass_with_card_id(action_id)
+        self.players[player_id].remove_card(card)
+        self.attack_table.append(card)
+        if player_id not in self.attackers:
+            self.attackers.append(player_id)
+        self.defender = (player_id + 1) % self.num_players
+        if self.defender in self.attackers:
+            self.attackers.remove(self.defender)
+
+    def _handle_take_action(self):
+        round_over = False
+        self.defender_has_taken = True
+        if len(self.stopped_attacking) == 2:
+            self._give_defender_table_cards()
+            round_over = True
+        else:
+            self.player_taking_action = self.attackers[-1]
+        return round_over
+
+    def _handle_stop_attack_action(self, player_id: int):
+        round_over = False
+        if player_id not in self.stopped_attacking:
+            self.stopped_attacking.append(player_id)
+        if len(self.attack_table) > len(self.defend_table):
+            if self.defender_has_taken:
+                if len(self.stopped_attacking) == 2:
+                    self._give_defender_table_cards()
+                    round_over = True
+                else:
+                    potential_attackers = self.get_potential_attackers(self.defender)
+                    potential_attackers.remove(self.attackers[-1])
+                    self.player_taking_action = potential_attackers[0]
+            else:
+                self.player_taking_action = self.defender
+        elif len(self.stopped_attacking) == 2:
+            round_over = True
+            self._clear_table()
+        else:
+            potential_attackers = self.get_potential_attackers(self.defender)
+            potential_attackers.remove(self.attackers[-1])
+            self.player_taking_action = potential_attackers[0]
+            if self.player_taking_action not in self.attackers:
+                self.attackers.append(self.player_taking_action)
+        return round_over
+
     def do_step(self, player_id: int, action_id: int) -> GameTransition:
         """
         Perform one draw of the game.
@@ -204,79 +265,27 @@ class DurakGame:
             raise ValueError('Player {} cannot take action {}, it is player {}\'s turn'.format(player_id,
                                                                                                action_id,
                                                                                                self.player_taking_action))
+        # Delegate handling of actions to helper functions
         if DurakAction.is_attack(action_id):
-            if not self.defender_has_taken:
-                self.stopped_attacking = []
-            if player_id not in self.attackers:
-                self.attackers.append(player_id)
-            card = DurakAction.card_from_attack_id(action_id)
-            self.players[player_id].remove_card(card)
-            self.attack_table.append(card)
-
+            self._handle_attack_action(player_id, action_id)
         elif DurakAction.is_defend(action_id):
-            self.stopped_attacking = []
-            card = DurakAction.card_from_defend_id(action_id)
-            self.players[player_id].remove_card(card)
-            self.defend_table.append(card)
-            if len(self.attack_table) == len(self.defend_table):
-                self.player_taking_action = self.attackers[-1]
-
+            self._handle_defend_action(player_id, action_id)
         elif DurakAction.is_pass_with_card(action_id):
-            self.stopped_attacking = []
-            card = DurakAction.card_from_pass_with_card_id(action_id)
-            self.players[player_id].remove_card(card)
-            self.attack_table.append(card)
-            if player_id not in self.attackers:
-                self.attackers.append(player_id)
-            self.defender = (player_id + 1) % self.num_players
-            if self.defender in self.attackers:
-                self.attackers.remove(self.defender)
-
+            self._handle_pass_with_card_action(player_id, action_id)
         elif DurakAction.is_take(action_id):
-            self.defender_has_taken = True
-            if len(self.stopped_attacking) == 2:
-                self._give_defender_table_cards()
-                round_over = True
-            else:
-                self.player_taking_action = self.attackers[-1]
-
+            round_over = self._handle_take_action()
         elif DurakAction.is_stop_attacking(action_id):
-            if player_id not in self.stopped_attacking:
-                self.stopped_attacking.append(player_id)
-            if len(self.attack_table) > len(self.defend_table):
-                if self.defender_has_taken:
-                    if len(self.stopped_attacking) == 2:
-                        self._give_defender_table_cards()
-                        round_over = True
-                    else:
-                        potential_attackers = self.get_potential_attackers(self.defender)
-                        potential_attackers.remove(self.attackers[-1])
-                        self.player_taking_action = potential_attackers[0]
-                else:
-                    self.player_taking_action = self.defender
-            elif len(self.stopped_attacking) == 2:
-                round_over = True
-                self._clear_table()
-            else:
-                potential_attackers = self.get_potential_attackers(self.defender)
-                potential_attackers.remove(self.attackers[-1])
-                self.player_taking_action = potential_attackers[0]
-                if self.player_taking_action not in self.attackers:
-                    self.attackers.append(self.player_taking_action)
-
+            round_over = self._handle_stop_attack_action(player_id)
         else:
             raise ValueError('Invalid action_id {}'.format(action_id))
 
         if round_over:
-            # print('round over====================')
-
             # Need to replenish hands from deck, going in order of attacker
             prev_attackers = prev_state['attackers']
             prev_defender = prev_state['defender']
-
             self.refill_cards(prev_attackers, prev_defender)
-            # pprint.pprint(self.players)
             self.defender_has_taken = False
+
             # Check if game is over
             self.is_done = self._is_game_over()
             if not self.is_done and len(self.deck.deck) == 0:

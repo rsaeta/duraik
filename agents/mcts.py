@@ -75,9 +75,10 @@ class MCTSPlayer(DurakPlayer):
     from the observational state and run many randomized rollouts for each possible
     action, picking the one with the best randomized rollouts in terms of expectation.
     """
-    def __init__(self, hand: List[tuple], num_simulations: int = 100):
+    def __init__(self, hand: List[tuple], num_simulations: int = 25):
         super().__init__(hand)
         self.num_simulations = num_simulations
+        self.node_cache = {}
 
     @staticmethod
     def get_rollout_node(root: MCTSNode) -> MCTSNode:
@@ -90,15 +91,24 @@ class MCTSPlayer(DurakPlayer):
         return node
 
     @staticmethod
-    def rollout(node: MCTSNode, action: int):
+    def rollout(node: MCTSNode) -> MCTSNode:
         state = node.state
+        action = np.random.choice(state.available_actions)
         reward, obs = simulate(state, action, ret_first_obs=True)
         if action not in node.children:
             node.add_child(action, MCTSNode(obs.next_state, node))
-        node = node.get_child(action)
-        while not node.is_root():
-            node.update(reward)
-            node = node.parent
+        update_node = node.get_child(action)
+        while not update_node.is_root():
+            update_node.update(reward)
+            update_node = update_node.parent
+        return node.get_child(action)
+
+    def get_node(self, state: ObservableDurakGameState) -> MCTSNode:
+        if state in self.node_cache:
+            return self.node_cache[state]
+        node = MCTSNode(state)
+        self.node_cache[state] = node
+        return node
 
     def choose_action(self, state: ObservableDurakGameState, actions: List[int]):
         """
@@ -109,12 +119,12 @@ class MCTSPlayer(DurakPlayer):
         """
         if len(actions) == 1:
             return actions[0]
-        root = MCTSNode(state)
+        root = self.get_node(state)
         for i in range(self.num_simulations):
             node = self.get_rollout_node(root)
-            action = np.random.choice(node.state.available_actions)
-            self.rollout(node, action)
-
+            child_node = self.rollout(node)
+            self.add_node_to_cache(node)
+            self.add_node_to_cache(child_node)
         """
         sim_scores = np.zeros(len(actions))
         sim_counts = np.zeros(len(actions))
@@ -126,6 +136,10 @@ class MCTSPlayer(DurakPlayer):
         return actions[np.argmax(sim_scores)]
         """
         return root.get_best_action()
+
+    def add_node_to_cache(self, node: MCTSNode):
+        if node.state not in self.node_cache:
+            self.node_cache[node.state] = node
 
 
 def shuffle_for_random_deck(deck, visible_card):
@@ -152,7 +166,7 @@ def get_deck_and_hands_from_state(state: ObservableDurakGameState):
         deck.deck.remove(card)
     for i in range(len(state.num_cards_in_hands)):
         if i == state.player_id:
-            hands.append(state.hand)
+            hands.append(list(state.hand))
             continue
         hand = []
         for _ in range(state.num_cards_in_hands[i]):
@@ -183,15 +197,15 @@ def random_game_from_observation_state(state: ObservableDurakGameState) -> Durak
         game.players[i].hand = hand
 
     # State management
-    game.attack_table = state.attack_table
-    game.defend_table = state.defend_table
-    game.graveyard = state.graveyard
+    game.attack_table = list(state.attack_table)
+    game.defend_table = list(state.defend_table)
+    game.graveyard = list(state.graveyard)
     game.visible_card = state.visible_card
-    game.attackers = state.attackers
+    game.attackers = list(state.attackers)
     game.defender = state.defender
     game.player_taking_action = state.acting_player
     game.defender_has_taken = state.defender_has_taken
-    game.stopped_attacking = state.stopped_attacking
+    game.stopped_attacking = list(state.stopped_attacking)
 
     # Replace deck
     game.deck = deck
