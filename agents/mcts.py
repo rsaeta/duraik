@@ -10,7 +10,7 @@ from game import DurakGame, DurakDeck
 
 def simulate(state: ObservableDurakGameState, action: int, ret_first_obs: bool = False):
     rand_game = random_game_from_observation_state(copy.deepcopy(state))
-    observation = first_observation = rand_game.do_step(state.player_id, action)
+    observation = first_observation = rand_game._do_step(state.player_id, action)
     while not observation.next_state.is_done:
         observation = rand_game.step()
     if ret_first_obs:

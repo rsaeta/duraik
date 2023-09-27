@@ -137,7 +137,7 @@ class DQAgent(nn.Module, DurakPlayer):
         self.memory.add_experience(transition)
 
     def choose_action(self, state, legal_actions):
-        if np.random.random() > self.eps:
+        if not self.training or np.random.random() > self.eps:
             state_array = state_to_input_array(state)
             state_tensor = torch.from_numpy(state_array).float()
             q_values = self.forward(state_tensor)  # Gets us all Q-values for even illegal actions
@@ -168,7 +168,7 @@ class DQAgent(nn.Module, DurakPlayer):
             max_q_value = target_q_value.max(dim=1)[0]
         true_q_values = reward + self.gamma * max_q_value
 
-        # Use main network to get predicted q-values and mask out illegal actions
+        # Use main network to get predicted q-values and select only actions we took
         self.dqn.train()
         predicted_q_values = self.dqn(state)
         predicted_q_values = torch.gather(predicted_q_values, 1, action.unsqueeze(1)).squeeze(1)
@@ -183,4 +183,3 @@ class DQAgent(nn.Module, DurakPlayer):
         new_dqn_sd = self.dqn.state_dict()
         target_sd = self.target_dqn.state_dict()
         self.target_dqn.load_state_dict(self.calc_target_params(target_sd, new_dqn_sd, self.eps))
-        

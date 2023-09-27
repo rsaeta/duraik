@@ -99,7 +99,7 @@ class DurakGame:
         self.is_done = False
         self.defender_has_taken = False
 
-    def get_observable_state(self, player_id) -> ObservableDurakGameState:
+    def get_observable_state(self, player_id: int) -> ObservableDurakGameState:
         """
         Gets the state of the game observable to that player's perspective.
         :return: ObservableDurakGameState
@@ -126,11 +126,16 @@ class DurakGame:
         )
 
     def step(self) -> GameTransition:
+        """
+        TODO: Need to update this to create a before and after state for each player
+        to get them to update correctly and so that all agents see all transitions, not
+        just the ones they are involved in. Not sure how I can actually do this well tbh
+        """
         player_id = self.player_taking_action
         actions = self.get_legal_actions(player_id)
         player = self.players[player_id]
         action = player.choose_action(self.get_observable_state(player_id), actions)
-        transition = self.do_step(player_id, action)
+        transition = self._do_step(player_id, action)
         player.observe(transition)
         return transition
 
@@ -250,7 +255,7 @@ class DurakGame:
                 self.attackers.append(self.player_taking_action)
         return round_over
 
-    def do_step(self, player_id: int, action_id: int) -> GameTransition:
+    def _do_step(self, player_id: int, action_id: int) -> GameTransition:
         """
         Perform one draw of the game.
         :param player_id: int, player id of the current player

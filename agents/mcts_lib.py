@@ -34,7 +34,7 @@ class MCTSGame(DurakGame, mcts_simple.Game):
     def take_action(self, action_id: int) -> None:
         player_id = self.player_taking_action
         print(f'Player {player_id} taking action {DurakAction.action_to_string(action_id)}')
-        transition = self.do_step(player_id, action_id)
+        transition = self._do_step(player_id, action_id)
         print(transition)
 
     def has_outcome(self) -> bool:
