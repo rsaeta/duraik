@@ -212,7 +212,7 @@ class DurakGame:
         while len(self.players[defender_id].hand) < 6 and len(self.deck.deck):
             self.players[defender_id].add_card(self.deck.deck.pop())
 
-    def get_potential_attackers(self, defender_id):
+    def get_potential_attackers(self, defender_id: int):
         return [(defender_id + 1) % self.num_players, (defender_id - 1) % self.num_players]
 
     def _handle_attack_action(self, player_id: int, action_id: int):

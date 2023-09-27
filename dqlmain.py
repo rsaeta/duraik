@@ -16,14 +16,17 @@ def main(*args, **kwargs):
     game.configure(gconfig)
     game.init_game()
 
+    game.players[2].load()
+
     for i in range(200):
         game.reset_game()
         print('playing game ', i)
         while not game.is_done:
             game.step()
         print(game.players)
-        for _ in range(10):
+        for _ in range(5):
             game.players[2].update()
+        game.players[2].save()
 
 
 if __name__ == '__main__':

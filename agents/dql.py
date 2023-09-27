@@ -103,8 +103,31 @@ class ExperienceReplay:
         self.legal_actions[i, transition.state.available_actions] = True
         self.memory_counter += 1
 
-    def sample(self) -> Tuple[np.array, np.array, np.array, np.array, np.array, np.array]:
-        i = np.random.choice(self.memory_counter) % self.memory_size
+    def save(self):
+        np.savez_compressed("experience_replay.npz",
+                            self.states,
+                            self.legal_actions,
+                            self.actions,
+                            self.rewards,
+                            self.new_states,
+                            self.terminal,
+                            self.memory_counter)
+
+    @classmethod
+    def load(cls, path):
+        data = np.load(path)
+        inst = cls(memory_size=data["arr_0"].shape[0],input_dim=data["arr_0"].shape[1],n_actions=data["arr_1"].shape[1])
+        inst.states = data["arr_0"]
+        inst.legal_actions = data["arr_1"]
+        inst.actions = data["arr_2"]
+        inst.rewards = data["arr_3"]
+        inst.new_states = data["arr_4"]
+        inst.terminal = data["arr_5"]
+        inst.memory_counter = data["arr_6"]
+        return inst
+
+    def sample(self, batch_size=10) -> Tuple[np.array, np.array, np.array, np.array, np.array, np.array]:
+        i = np.random.choice(self.memory_counter, batch_size) % self.memory_size
         return tuple(map(np.array, (self.states[i],
                 self.legal_actions[i],
                 self.actions[i],
@@ -142,6 +165,8 @@ class DQAgent(nn.Module, DurakPlayer):
 
         self.loss = nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.dqn.parameters())
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=100, gamma=0.9)
+
         self.device = device if device is not None \
             else torch.device('cuda') if torch.cuda.is_available() \
             else torch.device('cpu')
@@ -161,7 +186,7 @@ class DQAgent(nn.Module, DurakPlayer):
                 self.prev_state = transition.next_state
                 self.prev_action = -1
             else:
-                reward = transition.reward if transition.reward == 1 else transition.reward * len(self.hand)
+                reward = 100 if transition.reward == 1 else transition.reward * len(self.hand)
                 self.memory.add_experience(GameTransition(
                     self.prev_state, self.prev_action, reward, transition.next_state
                 ))
@@ -204,13 +229,13 @@ class DQAgent(nn.Module, DurakPlayer):
             with torch.no_grad():
                 self.target_dqn.eval()
                 target_q_value = self.target_dqn(new_state)
-                max_q_value = target_q_value.max().item()
-            true_q_values = reward + self.gamma * max_q_value
+                max_q_value = target_q_value.max(dim=-1).values
+                true_q_values = reward + self.gamma * max_q_value
 
             # Use main network to get predicted q-values and select only actions we took
             self.dqn.train()
             predicted_q_values = self.dqn(state)
-            predicted_q_values = torch.gather(predicted_q_values, 0, action.unsqueeze(0)).squeeze()
+            predicted_q_values = torch.gather(predicted_q_values, 1, action[None]).squeeze()
 
             # Gradient calculation and propagation
             loss = self.loss(predicted_q_values, true_q_values)
@@ -219,12 +244,27 @@ class DQAgent(nn.Module, DurakPlayer):
             torch.nn.utils.clip_grad_norm_(self.parameters(), 0.5)
             running_loss += loss.item()
             self.optimizer.step()
+            self.scheduler.step()
 
             # Update target network
         new_dqn_sd = self.dqn.state_dict()
         target_sd = self.target_dqn.state_dict()
         self.target_dqn.load_state_dict(self.calc_target_params(target_sd, new_dqn_sd, self.eps))
-        print(f"Loss: {running_loss/400}")
+        print(f"Loss: {running_loss/500}")
 
     def __repr__(self):
         return DurakPlayer.__repr__(self)
+
+    def load(self, path="dqn_agent.pt"):
+        self.load_state_dict(torch.load(path))
+        self.memory = ExperienceReplay.load("experience_replay.npz")
+        self.target_dqn.load_state_dict(torch.load("target_dqn_agent.pt"))
+        self.optimizer.load_state_dict(torch.load("optimizer.pt"))
+        self.scheduler.load_state_dict(torch.load("scheduler.pt"))
+
+    def save(self):
+        torch.save(self.state_dict(), "dqn_agent.pt")
+        torch.save(self.target_dqn.state_dict(), "target_dqn_agent.pt")
+        torch.save(self.optimizer.state_dict(), "optimizer.pt")
+        torch.save(self.scheduler.state_dict(), "scheduler.pt")
+        self.memory.save()
