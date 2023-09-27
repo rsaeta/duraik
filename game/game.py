@@ -80,14 +80,21 @@ class DurakGame:
             return self.np_random.randint(self.num_players)
         return min_rank_player
 
-    def init_game(self):
+    def reset_game(self):
+        self.init_game(init_players=False)
+
+    def init_game(self, init_players: Optional[bool] = True):
         """
         Initialize all the game elements.
         :return: state (dict), player_id (int)
         """
         self.deck = DurakDeck(self.lowest_card, self.np_random)
         hands, self.visible_card = self.deck.deal(6, self.num_players)
-        self.players = [agent(hand) for agent, hand in zip(self.player_agents, hands)]
+        if init_players:
+            self.players = [agent(i, hand=hand) for i, (agent, hand) in enumerate(zip(self.player_agents, hands))]
+        else:
+            for i, hand in enumerate(hands):
+                self.players[i].hand = hand
         self.in_players = list(range(self.num_players))
         self.attackers = [self._determine_init_attacker()]
         self.defender = (self.attackers[0] + 1) % self.num_players
@@ -125,19 +132,36 @@ class DurakGame:
             available_actions=tuple(actions),
         )
 
-    def step(self) -> GameTransition:
+    def state_per_player(self) -> List[ObservableDurakGameState]:
+        """
+        Returns the state according to each player's perspective.
+        """
+        return [self.get_observable_state(i) for i in range(self.num_players)]
+
+    def get_rewards(self):
+        if not self.is_done:
+            return [0.]*self.num_players
+        return [1. if len(player.hand) == 0 else -1. for player in self.players]
+
+    def step(self):
         """
         TODO: Need to update this to create a before and after state for each player
         to get them to update correctly and so that all agents see all transitions, not
         just the ones they are involved in. Not sure how I can actually do this well tbh
         """
+        prev_states = self.state_per_player()
         player_id = self.player_taking_action
         actions = self.get_legal_actions(player_id)
         player = self.players[player_id]
         action = player.choose_action(self.get_observable_state(player_id), actions)
-        transition = self._do_step(player_id, action)
-        player.observe(transition)
-        return transition
+        self._do_step(player_id, action)
+        rewards = self.get_rewards()
+        new_states = self.state_per_player()
+        for player, prev_state, new_state, reward in zip(self.players, prev_states, new_states, rewards):
+            if self.is_done:
+                print('done')
+            transition = GameTransition(prev_state, action, reward, new_state)
+            player.observe(transition)
 
     def _give_defender_table_cards(self):
         """
@@ -181,7 +205,7 @@ class DurakGame:
                 return True
         return False
 
-    def refill_cards(self, attack_order, defender_id):
+    def _refill_cards(self, attack_order, defender_id):
         for attacker_id in attack_order:
             while len(self.players[attacker_id].hand) < 6 and len(self.deck.deck):
                 self.players[attacker_id].add_card(self.deck.deck.pop())
@@ -255,21 +279,35 @@ class DurakGame:
                 self.attackers.append(self.player_taking_action)
         return round_over
 
-    def _do_step(self, player_id: int, action_id: int) -> GameTransition:
+    def _handle_round_over(self, prev_state: dict):
+        # Need to replenish hands from deck, going in order of attacker
+        prev_attackers = prev_state['attackers']
+        prev_defender = prev_state['defender']
+        self._refill_cards(prev_attackers, prev_defender)
+        self.defender_has_taken = False
+
+        # Check if game is over
+        self.is_done = self._is_game_over()
+        if not self.is_done and len(self.deck.deck) == 0:
+            while len(self.players[self.player_taking_action].hand) == 0:
+                self.player_taking_action = (self.player_taking_action + 1) % self.num_players
+            self.defender = (self.player_taking_action + 1) % self.num_players
+            while len(self.players[self.defender].hand) == 0:
+                self.defender = (self.defender + 1) % self.num_players
+
+    def _do_step(self, player_id: int, action_id: int):
         """
         Perform one draw of the game.
         :param player_id: int, player id of the current player
         :param action_id: int, action taken by the current player
         :return: state (dict)
         """
-        prev_player_state = self.get_observable_state(player_id)
         prev_state = self.get_whole_state()
-        reward = 0
         round_over = False
         if self.player_taking_action != player_id and not DurakAction.is_noop(action_id):
-            raise ValueError('Player {} cannot take action {}, it is player {}\'s turn'.format(player_id,
-                                                                                               action_id,
-                                                                                               self.player_taking_action))
+            raise ValueError('Player {} cannot take action {}, it is player {}\'s turn'.format(
+                player_id, action_id, self.player_taking_action
+            ))
         # Delegate handling of actions to helper functions
         if DurakAction.is_attack(action_id):
             self._handle_attack_action(player_id, action_id)
@@ -285,27 +323,7 @@ class DurakGame:
             raise ValueError('Invalid action_id {}'.format(action_id))
 
         if round_over:
-            # Need to replenish hands from deck, going in order of attacker
-            prev_attackers = prev_state['attackers']
-            prev_defender = prev_state['defender']
-            self.refill_cards(prev_attackers, prev_defender)
-            self.defender_has_taken = False
-
-            # Check if game is over
-            self.is_done = self._is_game_over()
-            if not self.is_done and len(self.deck.deck) == 0:
-                while len(self.players[self.player_taking_action].hand) == 0:
-                    self.player_taking_action = (self.player_taking_action + 1) % self.num_players
-                self.defender = (self.player_taking_action + 1) % self.num_players
-                while len(self.players[self.defender].hand) == 0:
-                    self.defender = (self.defender + 1) % self.num_players
-            hand_sizes = list(map(len, [player.hand for player in self.players]))
-            if hand_sizes[player_id] == 0:
-                reward = 1
-            elif self.is_done:
-                reward = -1
-        new_state = self.get_observable_state(player_id)
-        return GameTransition(prev_player_state, action_id, reward, new_state)
+            self._handle_round_over(prev_state)
 
     def get_legal_actions(self, player_id: int):
         """

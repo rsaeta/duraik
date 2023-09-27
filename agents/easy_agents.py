@@ -10,7 +10,8 @@ from game import (ObservableDurakGameState, GameTransition, DurakAction)
 
 class DurakPlayer:
 
-    def __init__(self, hand=None):
+    def __init__(self, player_id, hand=None):
+        self.player_id = player_id
         self.hand = [] if hand is None else hand
 
     def remove_card(self, card):
@@ -42,6 +43,9 @@ class DurakPlayer:
     def choose_action(self, state: ObservableDurakGameState, actions: List[int]):
         raise NotImplementedError('Player must implement choose_action method')
 
+    def update(self):
+        pass
+
     def __str__(self):
         return f"{self.__class__.__name__}({str(self.hand)})"
 
@@ -54,8 +58,8 @@ class DurakPlayer:
 
 class RandomPlayer(DurakPlayer):
 
-    def __init__(self, hand=None):
-        super().__init__(hand)
+    def __init__(self, player_id, hand=None):
+        super().__init__(player_id, hand=hand)
         self.np_random = np.random.RandomState()
 
     def choose_action(self, state, actions):

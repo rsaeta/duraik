@@ -13,7 +13,7 @@ def cards_to_input_array(cards: Collection[tuple]):
     :param cards: The cards to convert.
     :return: A 1D array of the cards.
     """
-    card_ids = np.array([DurakAction.ext_from_card(card) for card in cards])
+    card_ids = np.array([DurakAction.ext_from_card(card) for card in cards], dtype=np.int32)
     num_cards = DurakAction.n(4)
     card_array = np.zeros(num_cards)
     card_array[card_ids] = 1
@@ -68,6 +68,7 @@ class DQN(nn.Module):
         for dim in hidden_dims:
             hidden_layers.append(nn.Linear(cur_dim, dim))
             hidden_layers.append(nn.ReLU())
+            hidden_layers.append(nn.LayerNorm(dim))
             cur_dim = dim
         self.ff = nn.Sequential(*hidden_layers)
         self.out = nn.Linear(cur_dim, n_actions)
@@ -104,20 +105,32 @@ class ExperienceReplay:
 
     def sample(self) -> Tuple[np.array, np.array, np.array, np.array, np.array, np.array]:
         i = np.random.choice(self.memory_counter) % self.memory_size
-        return (self.states[i],
+        return tuple(map(np.array, (self.states[i],
                 self.legal_actions[i],
                 self.actions[i],
                 self.rewards[i],
                 self.new_states[i],
-                self.terminal[i])
+                self.terminal[i])))
 
 
 class DQAgent(nn.Module, DurakPlayer):
     """
     The actual agent using experience replay and a deep q network to learn how to play any game (?).
     """
-    def __init__(self, input_dim, n_actions, hidden_dims=None, memory_size=10000, batch_size=32, gamma=0.99, eps=0.1):
-        super().__init__()
+    def __init__(
+            self,
+            input_dim,
+            n_actions,
+            player_id,
+            hand,
+            hidden_dims=None,
+            memory_size=100000,
+            batch_size=32,
+            gamma=0.99,
+            eps=0.1,
+            device=None):
+        nn.Module.__init__(self)
+        DurakPlayer.__init__(self, player_id, hand=hand)
         self.dqn = DQN(input_dim, n_actions, hidden_dims)
 
         self.target_dqn = DQN(input_dim, n_actions, hidden_dims)
@@ -129,22 +142,42 @@ class DQAgent(nn.Module, DurakPlayer):
 
         self.loss = nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.dqn.parameters())
+        self.device = device if device is not None \
+            else torch.device('cuda') if torch.cuda.is_available() \
+            else torch.device('cpu')
+        self.prev_state = None
+        self.prev_action = None
+        self.to(self.device)
 
     def forward(self, x):
         return self.dqn(x)
 
     def observe(self, transition: GameTransition):
-        self.memory.add_experience(transition)
+        if transition.state.acting_player == self.player_id and self.prev_state is None:
+            self.prev_state = transition.state
+            self.prev_action = transition.action
+        if transition.next_state.acting_player == self.player_id or transition.next_state.is_done:
+            if self.prev_state is None:
+                self.prev_state = transition.next_state
+                self.prev_action = -1
+            else:
+                reward = transition.reward if transition.reward == 1 else transition.reward * len(self.hand)
+                self.memory.add_experience(GameTransition(
+                    self.prev_state, self.prev_action, reward, transition.next_state
+                ))
+                self.prev_state = transition.state
 
     def choose_action(self, state, legal_actions):
         if not self.training or np.random.random() > self.eps:
             state_array = state_to_input_array(state)
-            state_tensor = torch.from_numpy(state_array).float()
-            q_values = self.forward(state_tensor)  # Gets us all Q-values for even illegal actions
+            state_tensor = torch.from_numpy(state_array).float().to(self.device)
+            q_values = self(state_tensor)  # Gets us all Q-values for even illegal actions
             q_values = q_values[legal_actions]  # Gets us Q-values for legal actions
-            action = torch.argmax(q_values).item()
+            action_idx = torch.argmax(q_values).item()
+            action = legal_actions[action_idx]
         else:
             action = np.random.choice(legal_actions)
+        self.prev_action = action
         return action
 
     @staticmethod
@@ -159,27 +192,39 @@ class DQAgent(nn.Module, DurakPlayer):
         Performs optimization through experience replay. We will sample our memory for a batch of experiences,
         and optimize according to the loss function:
         """
-        experience = tuple(map(lambda x: torch.from_numpy(x), self.memory.sample()))
-        state, legal_actions, action, reward, new_state, terminal = experience
-        # Use target network to get target q-values without computing or storing gradients
-        with torch.no_grad():
-            self.target_dqn.eval()
-            target_q_value = self.target_dqn(new_state)
-            max_q_value = target_q_value.max(dim=1)[0]
-        true_q_values = reward + self.gamma * max_q_value
+        running_loss = 0.0
+        for i in range(500):
+            experience = tuple(map(lambda x: torch.from_numpy(x).to(self.device), self.memory.sample()))
+            state, legal_actions, action, reward, new_state, terminal = experience
+            state = state.float()
+            new_state = new_state.float()
+            action = action.to(torch.int64)
 
-        # Use main network to get predicted q-values and select only actions we took
-        self.dqn.train()
-        predicted_q_values = self.dqn(state)
-        predicted_q_values = torch.gather(predicted_q_values, 1, action.unsqueeze(1)).squeeze(1)
+            # Use target network to get target q-values without computing or storing gradients
+            with torch.no_grad():
+                self.target_dqn.eval()
+                target_q_value = self.target_dqn(new_state)
+                max_q_value = target_q_value.max().item()
+            true_q_values = reward + self.gamma * max_q_value
 
-        # Gradient calculation and propagation
-        loss = self.loss(predicted_q_values, true_q_values)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+            # Use main network to get predicted q-values and select only actions we took
+            self.dqn.train()
+            predicted_q_values = self.dqn(state)
+            predicted_q_values = torch.gather(predicted_q_values, 0, action.unsqueeze(0)).squeeze()
 
-        # Update target network
+            # Gradient calculation and propagation
+            loss = self.loss(predicted_q_values, true_q_values)
+            self.optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.parameters(), 0.5)
+            running_loss += loss.item()
+            self.optimizer.step()
+
+            # Update target network
         new_dqn_sd = self.dqn.state_dict()
         target_sd = self.target_dqn.state_dict()
         self.target_dqn.load_state_dict(self.calc_target_params(target_sd, new_dqn_sd, self.eps))
+        print(f"Loss: {running_loss/400}")
+
+    def __repr__(self):
+        return DurakPlayer.__repr__(self)
