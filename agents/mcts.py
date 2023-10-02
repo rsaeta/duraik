@@ -170,7 +170,7 @@ def get_deck_and_hands_from_state(state: ObservableDurakGameState):
             continue
         hand = []
         for _ in range(state.num_cards_in_hands[i]):
-            hand.append(deck.deck.pop())
+            hand.append(deck.deck.pop(0))
         hands.append(hand)
     return deck, hands
 

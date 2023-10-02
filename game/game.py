@@ -224,13 +224,16 @@ class DurakGame:
         self.players[player_id].remove_card(card)
         self.attack_table.append(card)
 
-    def _handle_defend_action(self, player_id: int, action_id: int):
+    def _handle_defend_action(self, player_id: int, action_id: int) -> bool:
         self.stopped_attacking = []
         card = DurakAction.card_from_defend_id(action_id)
         self.players[player_id].remove_card(card)
         self.defend_table.append(card)
         if len(self.attack_table) == len(self.defend_table):
             self.player_taking_action = self.attackers[-1]
+        if len(self.players[self.defender].hand) == 0:
+            return True
+        return False
 
     def _handle_pass_with_card_action(self, player_id: int, action_id: int):
         self.stopped_attacking = []
@@ -312,7 +315,7 @@ class DurakGame:
         if DurakAction.is_attack(action_id):
             self._handle_attack_action(player_id, action_id)
         elif DurakAction.is_defend(action_id):
-            self._handle_defend_action(player_id, action_id)
+            round_over = self._handle_defend_action(player_id, action_id)
         elif DurakAction.is_pass_with_card(action_id):
             self._handle_pass_with_card_action(player_id, action_id)
         elif DurakAction.is_take(action_id):
@@ -352,7 +355,7 @@ class DurakGame:
             if len(self.attack_table) == 0:
                 for card in player.hand:
                     legal_actions.append(DurakAction.attack_id_from_card(card))
-            elif len(self.attack_table) == 6:
+            elif len(self.attack_table) >= min(6, len(self.players[self.defender].hand)):
                 legal_actions.append(DurakAction.stop_attacking_action())
             else:
                 legal_actions.append(DurakAction.stop_attacking_action())
