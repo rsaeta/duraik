@@ -8,11 +8,11 @@ from game.game_state import ObservableDurakGameState
 from game import DurakGame, DurakDeck
 
 
-def simulate(state: ObservableDurakGameState, action: int, ret_first_obs: bool = False):
-    rand_game = random_game_from_observation_state(copy.deepcopy(state))
-    observation = first_observation = rand_game._do_step(state.player_id, action)
-    while not observation.next_state.is_done:
-        observation = rand_game.step()
+def simulate(state, action: int, ret_first_obs: bool = False):
+    game = random_game_from_observation_state(state)
+    game._do_step(state.player_id, action)
+    while not game.is_done:
+        game.step()
     if ret_first_obs:
         return observation.reward, first_observation
     return observation.reward
@@ -22,9 +22,11 @@ class MCTSNode:
 
     def __init__(self,
                  state: ObservableDurakGameState,
+                 actions: List[int] = None,
                  parent: 'MCTSNode' = None):
         self.state = state
         self.parent = parent
+        self.actions = actions
         # Children are indexed by action id
         self.children = {}
         self.visits = 0 if parent is not None else 1
@@ -65,7 +67,7 @@ class MCTSNode:
         self.visits += 1
 
     def fully_expanded(self):
-        return len(self.children) == len(self.state.available_actions)
+        return len(self.children) == len(self.actions)
 
 
 class MCTSPlayer(DurakPlayer):
@@ -75,8 +77,8 @@ class MCTSPlayer(DurakPlayer):
     from the observational state and run many randomized rollouts for each possible
     action, picking the one with the best randomized rollouts in terms of expectation.
     """
-    def __init__(self, hand: List[tuple], num_simulations: int = 25):
-        super().__init__(hand)
+    def __init__(self, player_id: int, hand: List[tuple], num_simulations: int = 25):
+        super().__init__(player_id, hand)
         self.num_simulations = num_simulations
         self.node_cache = {}
 
@@ -93,10 +95,12 @@ class MCTSPlayer(DurakPlayer):
     @staticmethod
     def rollout(node: MCTSNode) -> MCTSNode:
         state = node.state
-        action = np.random.choice(state.available_actions)
+        action = np.random.choice(node.actions)
         reward, obs = simulate(state, action, ret_first_obs=True)
         if action not in node.children:
-            node.add_child(action, MCTSNode(obs.next_state, node))
+            next_rand_game = random_game_from_observation_state(copy.deepcopy(obs.next_state))
+            next_actions = next_rand_game.get_legal_actions(obs.next_state.player_id)
+            node.add_child(action, MCTSNode(obs.next_state, next_actions, node))
         update_node = node.get_child(action)
         while not update_node.is_root():
             update_node.update(reward)
@@ -106,7 +110,9 @@ class MCTSPlayer(DurakPlayer):
     def get_node(self, state: ObservableDurakGameState) -> MCTSNode:
         if state in self.node_cache:
             return self.node_cache[state]
-        node = MCTSNode(state)
+        rand_game = random_game_from_observation_state(copy.deepcopy(state))
+        actions = rand_game.get_legal_actions(self.player_id)
+        node = MCTSNode(state, actions)
         self.node_cache[state] = node
         return node
 

@@ -15,18 +15,20 @@ def main(*args, **kwargs):
     game = DurakGame()
     game.configure(gconfig)
     game.init_game()
-
-    game.players[2].load()
+    wins = 0
 
     for i in range(200):
         game.reset_game()
         print('playing game ', i)
         while not game.is_done:
             game.step()
+        if len(game.players[2].hand) == 0:
+            wins += 1
         print(game.players)
         for _ in range(5):
             game.players[2].update()
         game.players[2].save()
+        print('win rate: ', wins / (i + 1))
 
 
 if __name__ == '__main__':
