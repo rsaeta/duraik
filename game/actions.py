@@ -1,4 +1,4 @@
-class DurakAction:
+class DurakAction(int):
     """
     n <- 15-lowest_card
     0 -> n*4: attack actions
@@ -12,8 +12,24 @@ class DurakAction:
     lowest_card = 6
 
     @staticmethod
+    def defend(card):
+        return DurakAction.defend_id_from_card(card)
+
+    @staticmethod
+    def attack(card):
+        return DurakAction.attack_id_from_card(card)
+
+    @staticmethod
+    def pass_with_card(card):
+        return DurakAction.pass_with_card_id_from_card(card)
+
+    @staticmethod
+    def stop_attacking():
+        return DurakAction.stop_attacking_action()
+
+    @staticmethod
     def n(m=1):
-        return (15 - DurakAction.lowest_card)*m
+        return (15 - DurakAction.lowest_card) * m
 
     @staticmethod
     def is_attack(action_id: int) -> bool:
@@ -21,11 +37,11 @@ class DurakAction:
 
     @staticmethod
     def is_defend(action_id: int) -> bool:
-        return DurakAction.n(4) <= action_id < 2*DurakAction.n(4)
+        return DurakAction.n(4) <= action_id < 2 * DurakAction.n(4)
 
     @staticmethod
     def is_pass_with_card(action_id: int) -> bool:
-        return DurakAction.n(4)*2 <= action_id < 3*DurakAction.n(4)
+        return DurakAction.n(4) * 2 <= action_id < 3 * DurakAction.n(4)
 
     @staticmethod
     def is_take(action_id: int) -> bool:
@@ -64,7 +80,7 @@ class DurakAction:
     @staticmethod
     def pass_with_card_id_from_card(card) -> int:
         ext = DurakAction.ext_from_card(card)
-        return ext + DurakAction.n(4)*2
+        return ext + DurakAction.n(4) * 2
 
     @staticmethod
     def card_from_attack_id(action_id: int) -> tuple:
@@ -81,7 +97,7 @@ class DurakAction:
     @staticmethod
     def num_actions() -> int:
         # 8 actions per rank, 4 suits attack/defend, take, stop_attacking, pass_with_card
-        return DurakAction.n(4)*3+3
+        return DurakAction.n(4) * 3 + 3
 
     @staticmethod
     def take_action() -> int:

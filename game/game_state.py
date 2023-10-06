@@ -21,7 +21,7 @@ class ObservableDurakGameState(NamedTuple):
     acting_player: int  # acting player
     defender_has_taken: bool  # whether the defender has taken the cards
     stopped_attacking: Tuple[int]  # list of players who have stopped attacking
-    available_actions: Tuple[int]  # list of available actions
+    # available_actions: Tuple[int]  # list of available actions
 
     def __str__(self):
         return f"""
@@ -63,7 +63,6 @@ GameState(
             self.acting_player,
             self.defender_has_taken,
             self.stopped_attacking,
-            self.available_actions,
         ))
 
 

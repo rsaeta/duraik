@@ -1,4 +1,5 @@
 import torch
+from numpy import ndarray
 from torch import nn
 from typing import Collection, Tuple
 import numpy as np
@@ -59,6 +60,7 @@ class DQN(nn.Module):
     """
     Predictive module mapping state representations to Q-values for each action.
     """
+
     def __init__(self, n_input, n_actions, hidden_dims=None):
         super().__init__()
         if hidden_dims is None:
@@ -72,22 +74,23 @@ class DQN(nn.Module):
             cur_dim = dim
         self.ff = nn.Sequential(*hidden_layers)
         self.out = nn.Linear(cur_dim, n_actions)
+        self.sm = nn.Softmax(dim=-1)
 
     def forward(self, x):
         y = self.ff(x)
-        return self.out(y)
+        return self.sm(self.out(y))
 
 
 class ExperienceReplay:
     """
     Class to hold experiences of SARS tuples in an efficient and easily retrievable manner to be used by the DQ Agent.
     """
-    def __init__(self, memory_size, input_dim, n_actions):
+
+    def __init__(self, memory_size, input_dim):
         self.memory_size = memory_size
         self.memory_counter = 0
         self.states = np.zeros((memory_size, input_dim), dtype=np.int32)
         # Need to store the legal actions available for us to properly mask the predicted q-values in our update step
-        self.legal_actions = np.zeros((memory_size, n_actions), dtype=np.bool_)
         self.new_states = np.zeros((memory_size, input_dim), dtype=np.int32)
         self.actions = np.zeros(memory_size, dtype=np.int32)
         self.rewards = np.zeros(memory_size, dtype=np.float32)
@@ -100,13 +103,11 @@ class ExperienceReplay:
         self.actions[i] = transition.action
         self.rewards[i] = transition.reward
         self.terminal[i] = transition.next_state.is_done
-        self.legal_actions[i, transition.state.available_actions] = True
         self.memory_counter += 1
 
     def save(self):
         np.savez_compressed("experience_replay.npz",
                             self.states,
-                            self.legal_actions,
                             self.actions,
                             self.rewards,
                             self.new_states,
@@ -116,7 +117,8 @@ class ExperienceReplay:
     @classmethod
     def load(cls, path):
         data = np.load(path)
-        inst = cls(memory_size=data["arr_0"].shape[0],input_dim=data["arr_0"].shape[1],n_actions=data["arr_1"].shape[1])
+        inst = cls(memory_size=data["arr_0"].shape[0],
+                   input_dim=data["arr_0"].shape[1])
         inst.states = data["arr_0"]
         inst.legal_actions = data["arr_1"]
         inst.actions = data["arr_2"]
@@ -126,20 +128,20 @@ class ExperienceReplay:
         inst.memory_counter = data["arr_6"]
         return inst
 
-    def sample(self, batch_size=10) -> Tuple[np.array, np.array, np.array, np.array, np.array, np.array]:
+    def sample(self, batch_size=10) -> Tuple[ndarray, ...]:
         i = np.random.choice(self.memory_counter, batch_size) % self.memory_size
         return tuple(map(np.array, (self.states[i],
-                self.legal_actions[i],
-                self.actions[i],
-                self.rewards[i],
-                self.new_states[i],
-                self.terminal[i])))
+                                    self.actions[i],
+                                    self.rewards[i],
+                                    self.new_states[i],
+                                    self.terminal[i])))
 
 
 class DQAgent(nn.Module, DurakPlayer):
     """
     The actual agent using experience replay and a deep q network to learn how to play any game (?).
     """
+
     def __init__(
             self,
             input_dim,
@@ -155,11 +157,12 @@ class DQAgent(nn.Module, DurakPlayer):
         nn.Module.__init__(self)
         DurakPlayer.__init__(self, player_id, hand=hand)
         self.dqn = DQN(input_dim, n_actions, hidden_dims)
+        self.batch_size = batch_size
 
         self.target_dqn = DQN(input_dim, n_actions, hidden_dims)
         self.target_dqn.load_state_dict(self.dqn.state_dict())
 
-        self.memory = ExperienceReplay(memory_size, input_dim, n_actions)
+        self.memory = ExperienceReplay(memory_size, input_dim)
         self.eps = eps
         self.gamma = gamma
 
@@ -178,6 +181,8 @@ class DQAgent(nn.Module, DurakPlayer):
         return self.dqn(x)
 
     def observe(self, transition: GameTransition):
+        if transition.reward != 0:
+            print('Transition')
         if transition.state.acting_player == self.player_id and self.prev_state is None:
             self.prev_state = transition.state
             self.prev_action = transition.action
@@ -203,6 +208,7 @@ class DQAgent(nn.Module, DurakPlayer):
         else:
             action = np.random.choice(legal_actions)
         self.prev_action = action
+        print(f"Action: {DurakAction.action_to_string(action)}")
         return action
 
     @staticmethod
@@ -218,9 +224,9 @@ class DQAgent(nn.Module, DurakPlayer):
         and optimize according to the loss function:
         """
         running_loss = 0.0
-        for i in range(500):
+        for i in range(100):
             experience = tuple(map(lambda x: torch.from_numpy(x).to(self.device), self.memory.sample()))
-            state, legal_actions, action, reward, new_state, terminal = experience
+            state, action, reward, new_state, terminal = experience
             state = state.float()
             new_state = new_state.float()
             action = action.to(torch.int64)
@@ -241,7 +247,7 @@ class DQAgent(nn.Module, DurakPlayer):
             loss = self.loss(predicted_q_values, true_q_values)
             self.optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.parameters(), 0.5)
+            torch.nn.utils.clip_grad_norm_(self.parameters(), 1)
             running_loss += loss.item()
             self.optimizer.step()
             self.scheduler.step()
@@ -250,7 +256,7 @@ class DQAgent(nn.Module, DurakPlayer):
         new_dqn_sd = self.dqn.state_dict()
         target_sd = self.target_dqn.state_dict()
         self.target_dqn.load_state_dict(self.calc_target_params(target_sd, new_dqn_sd, self.eps))
-        print(f"Loss: {running_loss/500}")
+        print(f"Loss: {running_loss / 500}")
 
     def __repr__(self):
         return DurakPlayer.__repr__(self)
