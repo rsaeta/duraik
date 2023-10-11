@@ -7,7 +7,7 @@ def main(*args, **kwargs):
     gconfig = {
         'game_num_players': 3,
         'lowest_card': 6,
-        'agents': [RandomPlayer, RandomPlayer, RandomPlayer],
+        'agents': [RandomPlayer, RandomPlayer, HumanPlayer],
     }
     game = DurakGame()
     game.configure(gconfig)

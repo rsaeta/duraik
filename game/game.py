@@ -4,7 +4,9 @@ import numpy as np
 from typing import Optional, List, Tuple, Literal
 
 from .actions import DurakAction
-from .game_state import ObservableDurakGameState, GameTransition
+from .game_state import (ObservableDurakGameState,
+                         GameTransition,
+                         InfoState)
 
 
 class DurakDeck:
@@ -65,6 +67,7 @@ class DurakGame:
         self.player_taking_action: Optional[int] = None  # the player taking action
         self.is_done: bool = False  # whether the game is done
         self.graveyard: Optional[List[tuple]] = None  # list of cards in the graveyard
+        self.history: Optional[List[List[ObservableDurakGameState]]] = None  # list of history of the game
 
     def configure(self, game_config):
         self.num_players = game_config.get('game_num_players', 3)
@@ -114,6 +117,7 @@ class DurakGame:
         self.graveyard = []
         self.is_done = False
         self.defender_has_taken = False
+        self.history = [[info_state] for info_state in self.info_states_per_player()]
 
     def get_observable_state(self, player_id: int) -> ObservableDurakGameState:
         """
@@ -138,7 +142,6 @@ class DurakGame:
             acting_player=self.player_taking_action,
             defender_has_taken=self.defender_has_taken,
             stopped_attacking=tuple(self.stopped_attacking),
-            # available_actions=tuple(actions),
         )
 
     def state_per_player(self) -> List[ObservableDurakGameState]:
@@ -152,6 +155,12 @@ class DurakGame:
             return [0.]*self.num_players
         return [1. if len(player.hand) == 0 else -1. for player in self.players]
 
+    def info_states_per_player(self) -> List[InfoState]:
+        """
+        Returns the info state according to each player's perspective.
+        """
+        return [InfoState(tuple(self.history[i]), self.get_observable_state(i)) for i in range(self.num_players)]
+
     def step(self):
         """
         TODO: Need to update this to create a before and after state for each player
@@ -162,14 +171,16 @@ class DurakGame:
         player_id = self.player_taking_action
         actions = self.get_legal_actions(player_id)
         player = self.players[player_id]
-        action = player.choose_action(self.get_observable_state(player_id), actions)
+        info_state = InfoState(tuple(self.history[player_id]), self.history[player_id][-1])
+        action = player.choose_action(info_state, actions)
         self._do_step(player_id, action)
         rewards = self.get_rewards()
         new_states = self.state_per_player()
-        for player, prev_state, new_state, reward in zip(self.players, prev_states, new_states, rewards):
+        for i, (player, prev_state, new_state, reward) in enumerate(zip(self.players, prev_states, new_states, rewards)):
             if self.is_done:
                 print('done')
             transition = GameTransition(prev_state, action, reward, new_state)
+            self.history[i].append(new_state)
             player.observe(transition)
 
     def _give_defender_table_cards(self):

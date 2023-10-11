@@ -21,7 +21,6 @@ class ObservableDurakGameState(NamedTuple):
     acting_player: int  # acting player
     defender_has_taken: bool  # whether the defender has taken the cards
     stopped_attacking: Tuple[int]  # list of players who have stopped attacking
-    # available_actions: Tuple[int]  # list of available actions
 
     def __str__(self):
         return f"""
@@ -66,8 +65,19 @@ GameState(
         ))
 
 
+class InfoState(NamedTuple):
+    """
+    This class encompasses not just the observable game state at a given time, but also
+    holds the history of observable events of the game up until that point. This is
+    useful for agents that use recurrent neural networks or any sequence processing to update
+    their policy.
+    """
+    full_state: Tuple[ObservableDurakGameState]
+    current_state: ObservableDurakGameState
+
+
 class GameTransition(NamedTuple):
-    state: ObservableDurakGameState
+    state: InfoState
     action: int
     reward: float
-    next_state: ObservableDurakGameState
+    next_state: InfoState

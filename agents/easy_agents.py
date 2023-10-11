@@ -1,11 +1,8 @@
 import pprint
 from typing import List
 
-import torch
-from torch import nn
-
 import numpy as np
-from game import (ObservableDurakGameState, GameTransition, DurakAction)
+from game import (ObservableDurakGameState, GameTransition, DurakAction, InfoState)
 
 
 class DurakPlayer:
@@ -40,7 +37,7 @@ class DurakPlayer:
                 passable_cards.add((s, r))
         return passable_cards
 
-    def choose_action(self, state: ObservableDurakGameState, actions: List[int]):
+    def choose_action(self, info_state: InfoState, actions: List[int]):
         raise NotImplementedError('Player must implement choose_action method')
 
     def update(self):
@@ -68,9 +65,9 @@ class RandomPlayer(DurakPlayer):
 
 class HumanPlayer(DurakPlayer):
 
-    def choose_action(self, state, actions):
+    def choose_action(self, info_state: InfoState, actions):
         print('State:')
-        pprint.pprint(state)
+        pprint.pprint(info_state.current_state)
         print('Actions: {}'.format(list(map(DurakAction.action_to_string, actions))))
         action = -1
         while action not in range(len(actions)):

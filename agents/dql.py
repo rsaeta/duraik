@@ -3,7 +3,7 @@ from numpy import ndarray
 from torch import nn
 from typing import Collection, Tuple
 import numpy as np
-from game import DurakAction, ObservableDurakGameState, GameTransition
+from game import DurakAction, ObservableDurakGameState, GameTransition, InfoState
 from .easy_agents import DurakPlayer
 
 
@@ -21,6 +21,12 @@ def cards_to_input_array(cards: Collection[tuple]):
     return card_array
 
 
+def one_hot(num_classes, idx):
+    arr = np.zeros(num_classes)
+    arr[idx] = 1
+    return arr
+
+
 def state_to_input_array(state: ObservableDurakGameState):
     """
     Converts a state to a 1D array input for the neural network and saving for history.
@@ -35,7 +41,8 @@ def state_to_input_array(state: ObservableDurakGameState):
     :param state: The state to convert.
     :return: A 1D array of the state.
     """
-    player_id = np.array([state.player_id])
+    num_players = len(state.num_cards_in_hands)
+    player_id_arr = one_hot(num_players, state.player_id)
     hand_array = cards_to_input_array(state.hand)
     attack_table_array = cards_to_input_array(state.attack_table)
     defend_table_array = cards_to_input_array(state.defend_table)
@@ -43,9 +50,9 @@ def state_to_input_array(state: ObservableDurakGameState):
     opponents_cards_left_array = np.array(state.num_cards_in_hands)
     cards_left_in_deck_array = np.array([state.num_cards_left_in_deck])
     is_done = np.array([state.is_done])
-
-    return np.concatenate((
-        player_id,
+    acting_player = one_hot(num_players, state.acting_player)
+    arr = np.concatenate((
+        player_id_arr,
         hand_array,
         attack_table_array,
         defend_table_array,
@@ -53,7 +60,9 @@ def state_to_input_array(state: ObservableDurakGameState):
         opponents_cards_left_array,
         cards_left_in_deck_array,
         is_done,
+        acting_player,
     ))
+    return arr
 
 
 class DQN(nn.Module):
@@ -183,10 +192,10 @@ class DQAgent(nn.Module, DurakPlayer):
     def observe(self, transition: GameTransition):
         if transition.reward != 0:
             print('Transition')
-        if transition.state.acting_player == self.player_id and self.prev_state is None:
+        if transition.state.current_state.acting_player == self.player_id and self.prev_state is None:
             self.prev_state = transition.state
             self.prev_action = transition.action
-        if transition.next_state.acting_player == self.player_id or transition.next_state.is_done:
+        if transition.next_state.current_state.acting_player == self.player_id or transition.next_state.current_state.is_done:
             if self.prev_state is None:
                 self.prev_state = transition.next_state
                 self.prev_action = -1
@@ -197,9 +206,9 @@ class DQAgent(nn.Module, DurakPlayer):
                 ))
                 self.prev_state = transition.state
 
-    def choose_action(self, state, legal_actions):
+    def choose_action(self, state: InfoState, legal_actions):
         if not self.training or np.random.random() > self.eps:
-            state_array = state_to_input_array(state)
+            state_array = state_to_input_array(state.current_state)
             state_tensor = torch.from_numpy(state_array).float().to(self.device)
             q_values = self(state_tensor)  # Gets us all Q-values for even illegal actions
             q_values = q_values[legal_actions]  # Gets us Q-values for legal actions
