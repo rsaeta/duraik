@@ -62,15 +62,16 @@ class RandomPlayer(DurakPlayer):
         super().__init__(player_id, hand=hand)
         self.np_random = np.random.RandomState()
 
-    def choose_action(self, state, actions):
-        return self.np_random.choice(actions)
+    def choose_action(self, state, actions) -> DurakAction:
+        return DurakAction(self.np_random.choice(actions))
 
 
 class HumanPlayer(DurakPlayer):
 
     def choose_action(self, state, actions):
         print('State:')
-        pprint.pprint(state)
+        pprint.pprint(state[-1])
+        actions = sorted(actions)
         print('Actions: {}'.format(list(map(DurakAction.action_to_string, actions))))
         action = -1
         while action not in range(len(actions)):

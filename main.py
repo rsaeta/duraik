@@ -1,5 +1,5 @@
 from game import DurakGame
-from agents import RandomPlayer, MCTSPlayer, HumanPlayer
+from agents import RandomPlayer
 
 
 def main(*args, **kwargs):

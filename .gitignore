@@ -4,3 +4,4 @@ __pycache__
 *.npz
 derp.py
 log*
+.vscode
