@@ -34,17 +34,17 @@ def test_game_ending_easy():
     )
     runner = GameRunner([RandomPlayer(i) for i in range(3)])
     runner.history = [state]
-    assert fgame._get_legal_actions(state) == [DurakAction.attack_id_from_card(('S', 8))]
+    assert fgame.get_legal_actions(state) == [DurakAction.attack_id_from_card(('S', 8))]
     new_state = runner.step()
     assert new_state.player_taking_action == 0
-    assert fgame._get_legal_actions(new_state) == [DurakAction.take_action()]
+    assert fgame.get_legal_actions(new_state) == [DurakAction.take_action()]
     new_state = runner.step()
     assert new_state.player_taking_action == 1
     assert len(new_state.player_hands[0]) == 2
     assert len(new_state.player_hands[1]) == 1
     assert len(new_state.player_hands[2]) == 0
 
-    assert fgame._get_legal_actions(new_state) == [DurakAction.attack_id_from_card(('S', 7))]
+    assert fgame.get_legal_actions(new_state) == [DurakAction.attack_id_from_card(('S', 7))]
 
     new_state = runner.step()
     assert new_state.is_done
@@ -78,113 +78,113 @@ def test_passing():
     runner = GameRunner([RandomPlayer(i) for i in range(3)])
     runner.history = [state]
 
-    assert set(fgame._get_legal_actions(state)) == {DurakAction.attack(('S', 6)),
-                                                    DurakAction.attack(('H', 12)),
-                                                    DurakAction.attack(('D', 14)),
-                                                    DurakAction.attack(('S', 7))}
+    assert set(fgame.get_legal_actions(state)) == {DurakAction.attack(('S', 6)),
+                                                   DurakAction.attack(('H', 12)),
+                                                   DurakAction.attack(('D', 14)),
+                                                   DurakAction.attack(('S', 7))}
     new_state = runner._do_step(DurakAction.attack(('S', 6)))
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.stop_attacking_action()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.stop_attacking_action()}
     new_state = runner.step()
     assert new_state.player_taking_action == new_state.defender
 
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action(),
-                                                        DurakAction.pass_with_card(('C', 6))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action(),
+                                                       DurakAction.pass_with_card(('C', 6))}
     new_state = runner._do_step(DurakAction.pass_with_card(('C', 6)))
     assert new_state.defender == 2
     assert new_state.attackers == tuple([0, 1])
     assert new_state.player_taking_action == 1
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.stop_attacking()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.stop_attacking()}
     new_state = runner.step()
     assert new_state.player_taking_action == new_state.defender
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action(), DurakAction.pass_with_card(('D', 6))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action(), DurakAction.pass_with_card(('D', 6))}
     new_state = runner._do_step(DurakAction.pass_with_card(('D', 6)))
     assert new_state.defender == 0
     assert new_state.attackers == (1, 2)
     assert new_state.player_taking_action == 2
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.stop_attacking()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.stop_attacking()}
     new_state = runner.step()
     assert new_state.player_taking_action == new_state.defender
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action(),
-                                                        DurakAction.defend(('S', 7))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action(),
+                                                       DurakAction.defend(('S', 7))}
     new_state = runner._do_step(DurakAction.defend(('S', 7)))
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action()}
     new_state = runner.step()
     assert new_state.player_taking_action == 1
-    assert fgame._get_legal_actions(new_state) == [DurakAction.attack(('C', 14))]
+    assert fgame.get_legal_actions(new_state) == [DurakAction.attack(('C', 14))]
     assert new_state.defender == 2
     new_state = runner.step()
     assert new_state.player_taking_action == new_state.defender
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action()}
     new_state = runner.step()
     assert new_state.player_taking_action == 0
     assert new_state.attackers == (0,)
     assert new_state.defender == 2
     assert len(new_state.player_hands[new_state.defender]) == 2
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.attack(('H', 12)),
-                                                        DurakAction.attack(('D', 14)),
-                                                        DurakAction.attack(('S', 7)),
-                                                        DurakAction.attack(('S', 6)),
-                                                        DurakAction.attack(('C', 6)),
-                                                        DurakAction.attack(('D', 6))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.attack(('H', 12)),
+                                                       DurakAction.attack(('D', 14)),
+                                                       DurakAction.attack(('S', 7)),
+                                                       DurakAction.attack(('S', 6)),
+                                                       DurakAction.attack(('C', 6)),
+                                                       DurakAction.attack(('D', 6))}
     new_state = runner._do_step(DurakAction.attack(('H', 12)))
-    assert fgame._get_legal_actions(new_state) == [DurakAction.stop_attacking_action()]
+    assert fgame.get_legal_actions(new_state) == [DurakAction.stop_attacking_action()]
     new_state = runner.step()
     assert new_state.player_taking_action == new_state.defender
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action()}
     new_state = runner.step()
     assert new_state.player_taking_action == 0
-    assert fgame._get_legal_actions(new_state) == [DurakAction.stop_attacking()]
+    assert fgame.get_legal_actions(new_state) == [DurakAction.stop_attacking()]
     new_state = runner.step()
 
     assert new_state.player_taking_action == 0
     assert new_state.attackers == (0,)
     assert len(new_state.attack_table) == len(new_state.defend_table) == 0
     assert new_state.defender == 2
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.attack(('S', 6)),
-                                                        DurakAction.attack(('S', 7)),
-                                                        DurakAction.attack(('D', 14)),
-                                                        DurakAction.attack(('C', 6)),
-                                                        DurakAction.attack(('D', 6))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.attack(('S', 6)),
+                                                       DurakAction.attack(('S', 7)),
+                                                       DurakAction.attack(('D', 14)),
+                                                       DurakAction.attack(('C', 6)),
+                                                       DurakAction.attack(('D', 6))}
     new_state = runner._do_step(DurakAction.attack(('S', 6)))
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.stop_attacking_action(),
-                                                        DurakAction.attack(('C', 6)),
-                                                        DurakAction.attack(('D', 6))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.stop_attacking_action(),
+                                                       DurakAction.attack(('C', 6)),
+                                                       DurakAction.attack(('D', 6))}
     new_state = runner._do_step(DurakAction.attack(('C', 6)))
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.stop_attacking_action(),
-                                                        DurakAction.attack(('D', 6))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.stop_attacking_action(),
+                                                       DurakAction.attack(('D', 6))}
     new_state = runner._do_step(DurakAction.attack(('D', 6)))
     assert len(new_state.attack_table) == 3
     assert new_state.player_taking_action == new_state.defender
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action()}
     new_state = runner.step()
     assert new_state.player_taking_action == 0
     assert new_state.attackers == (0,)
     assert len(new_state.attack_table) == len(new_state.defend_table) == 0
     assert new_state.defender == 2
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.attack(('S', 7)), DurakAction.attack(('D', 14))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.attack(('S', 7)), DurakAction.attack(('D', 14))}
     new_state = runner._do_step(DurakAction.attack(('D', 14)))
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.stop_attacking_action()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.stop_attacking_action()}
     new_state = runner.step()
     assert new_state.player_taking_action == new_state.defender
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.defend(('S', 6)), DurakAction.take_action()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.defend(('S', 6)), DurakAction.take_action()}
     new_state = runner._do_step(DurakAction.defend(('S', 6)))
     assert new_state.player_taking_action == 0
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.stop_attacking()}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.stop_attacking()}
     new_state = runner.step()
     assert new_state.player_taking_action == 2
     assert new_state.attackers == (2,)
     assert len(new_state.attack_table) == len(new_state.defend_table) == 0
     assert new_state.defender == 0
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.attack(('C', 6)),
-                                                        DurakAction.attack(('D', 6)),
-                                                        DurakAction.attack(('D', 11)),
-                                                        DurakAction.attack(('H', 12)),
-                                                        DurakAction.attack(('C', 14))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.attack(('C', 6)),
+                                                       DurakAction.attack(('D', 6)),
+                                                       DurakAction.attack(('D', 11)),
+                                                       DurakAction.attack(('H', 12)),
+                                                       DurakAction.attack(('C', 14))}
 
     new_state = runner._do_step(DurakAction.attack(('C', 6)))
 
     assert new_state.player_taking_action == new_state.defender
-    assert set(fgame._get_legal_actions(new_state)) == {DurakAction.take_action(), DurakAction.defend(('S', 7))}
+    assert set(fgame.get_legal_actions(new_state)) == {DurakAction.take_action(), DurakAction.defend(('S', 7))}
 
     new_state = runner._do_step(DurakAction.defend(('S', 7)))
     assert new_state.is_done

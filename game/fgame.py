@@ -78,7 +78,7 @@ def step_attack_action(state: DurakGameState, action_id: DurakAction) -> DurakGa
         hand if i == player_id else h for i, h in enumerate(state.player_hands)
     )
     state_updates.update(player_hands=new_hands, attack_table=attack_table)
-    if (len(new_hands[state.defender]) == state.num_undefended() + 1) or len(hand) == 0:
+    if (len(new_hands[state.defender]) == state.num_undefended() + 1) or len(hand) == 0 and not state.defender_has_taken:
         state_updates.update(player_taking_action=state.defender)
 
     return state._replace(**state_updates)
@@ -101,10 +101,15 @@ def step_defend_action(state: DurakGameState, action_id: DurakAction) -> DurakGa
         hand if i == player_id else h for i, h in enumerate(state.player_hands)
     )
     state_updates.update(player_hands=new_hands, defend_table=defend_table, stopped_attacking=tuple())
-    if len(state.attack_table) == len(defend_table):
-        state_updates.update(player_taking_action=state.attackers[-1])
+    state = state._replace(**state_updates)
+    if len(state.attack_table) == 6 or len(hand) == 0:  # Max attacks have happened or defender is out of cards
+        state = _clear_table(state)
+        state = _refill_cards(state)
+        state = _iterate_players(state)
+    elif len(state.attack_table) == len(defend_table):
+        state = state._replace(player_taking_action=state.attackers[-1])
 
-    return state._replace(**state_updates)
+    return state
 
 
 def step_pass_with_card_action(state: DurakGameState, action_id: DurakAction) -> DurakGameState:
@@ -144,13 +149,15 @@ def step_take_action(state: DurakGameState) -> DurakGameState:
     defender takes all cards. Both attackers must choose the stop_attacking action before
     the round is over.
     """
-    state_updates = dict()
-    state_updates.update(defender_has_taken=True, stopped_attacking=tuple())
+    state = state._replace(defender_has_taken=True, stopped_attacking=tuple())
     if state.num_undefended() == len(state.player_hands[state.defender]):
-        state_updates.update(round_over=True)
-    if len(state.attack_table) < len(state.player_hands[state.defender]):
-        state_updates.update(player_taking_action=state.attackers[-1])
-    return state._replace(**state_updates)
+        state = _give_defender_cards(state)
+        state = _refill_cards(state)
+        state = _iterate_players(state)
+        return state
+    if state.num_undefended() < len(state.player_hands[state.defender]):
+        return state._replace(player_taking_action=state.attackers[-1])
+    return state
 
 
 def _give_defender_cards(state: DurakGameState) -> DurakGameState:
@@ -161,21 +168,15 @@ def _give_defender_cards(state: DurakGameState) -> DurakGameState:
     """
     defender = state.defender
     state_updates = dict()
-    state_updates.update(defender_has_taken=False)
+    #state_updates.update(defender_has_taken=False)
     hand = state.player_hands[defender]
     hand = hand + tuple(c for c in state.attack_table)
     hand = hand + tuple(c for c in state.defend_table)
     new_hands = tuple(
         hand if i == defender else h for i, h in enumerate(state.player_hands)
     )
-    attacker = (defender + 1) % len(state.player_hands)
-    if len(new_hands[attacker]) == 0:
-        attacker = (attacker + 1) % len(state.player_hands)
-    defender = (attacker + 1) % len(state.player_hands)
-    if len(new_hands[defender]) == 0:
-        defender = (defender + 1) % len(state.player_hands)
     state_updates.update(
-        player_hands=new_hands, attack_table=tuple(), defend_table=tuple(), round_over=True,
+        player_hands=new_hands, attack_table=tuple(), defend_table=tuple(),
         stopped_attacking=tuple(),
     )
 
@@ -193,18 +194,23 @@ def _clear_table(state: DurakGameState) -> DurakGameState:
     graveyard = list(state.graveyard)
     graveyard.extend(state.attack_table)
     graveyard.extend(state.defend_table)
-    """
-    
-    """
     state_updates.update(
         attack_table=tuple(),
         defend_table=tuple(),
         graveyard=tuple(graveyard),
         stopped_attacking=tuple(),
-        # player_taking_action=attacker,
-        round_over=True,
     )
     return state._replace(**state_updates)
+
+
+def _is_attack_done(state: DurakGameState) -> bool:
+    """
+    Checks if the attack is done. This is the case when the defender has defended all cards or
+    the defender has taken.
+    """
+    if len(state.stopped_attacking) == len(state.in_players()) - 1 or len(state.in_players()) < 2:
+        return True
+    return state.num_undefended() == len(state.player_hands[state.defender])
 
 
 def step_stop_attack_action(state: DurakGameState) -> DurakGameState:
@@ -215,42 +221,44 @@ def step_stop_attack_action(state: DurakGameState) -> DurakGameState:
     cards on the table.
     """
     player_id = state.player_taking_action
-    state_updates = dict()
     if player_id not in state.stopped_attacking:
         state = state._replace(stopped_attacking=state.stopped_attacking + (player_id,))
-    if len(state.attack_table) > len(state.defend_table):  # Defender has not defended all cards
-        if state.defender_has_taken:  # Defender has chosen to take, just adding cards now
-            if (len(set(state.potential_attackers()) - set(state.stopped_attacking)) == 0
-                    or state.num_undefended() == len(state.player_hands[state.defender])):  # All attackers have stopped
-                state = _give_defender_cards(state)
-            else:  # Other attacker needs to elect to stop attacking
-                potential_attackers = state.potential_attackers()
-                if state.attackers[-1] in potential_attackers:
-                    potential_attackers.remove(state.attackers[-1])
-                if len(potential_attackers):
-                    state_updates.update(player_taking_action=potential_attackers[0])
-                else:
-                    state_updates.update(player_taking_action=state.defender)
+    if _is_attack_done(state):  # All players have stopped attacking
+        if state.defender_has_taken:
+            state = _give_defender_cards(state)
         else:
-            state_updates.update(player_taking_action=state.defender)
-    elif (
-        not state.defender_has_taken and len(state.stopped_attacking) == len(state.in_players()) - 1
-    ):  # All players have stopped attacking and successful defense
-        state = _clear_table(state)
+            state = _clear_table(state)
+        state = _refill_cards(state)
+        state = _iterate_players(state)
+        state = state._replace(stopped_attacking=tuple(),
+                               defender_has_taken=False)
+        return state
+    if state.num_undefended() and not state.defender_has_taken:
+        state = state._replace(player_taking_action=state.defender)
     else:
         potential_attackers = state.potential_attackers()
-        if state.attackers[-1] in potential_attackers:
-            potential_attackers.remove(state.attackers[-1])
-        if len(potential_attackers):
-            state_updates.update(player_taking_action=potential_attackers[0])
-        else:
-            state_updates.update(player_taking_action=state.defender)
-    state = state._replace(**state_updates)
-    if state.player_taking_action not in state.attackers + (state.defender,):
-        state = state._replace(
-            attackers=state.attackers + (state.player_taking_action,)
-        )
+        potential_attackers.remove(player_id)
+        if not len(potential_attackers):
+            print('Da fuq happened')
+        state = state._replace(player_taking_action=potential_attackers[0])
     return state
+
+
+def _iterate_players(state: DurakGameState) -> DurakGameState:
+    """
+    Moves the attacker/defender counters forward.
+    """
+    attacker = state.defender if not state.defender_has_taken else (state.defender + 1) % len(state.player_hands)
+    if len(state.player_hands[attacker]) == 0:
+        attacker = (attacker + 1) % len(state.player_hands)
+    defender = (attacker + 1) % len(state.player_hands)
+    if len(state.player_hands[defender]) == 0:
+        defender = (defender + 1) % len(state.player_hands)
+    print('iterating player: {} -> {}'.format(state.player_taking_action, attacker))
+
+
+
+    return state._replace(attackers=(attacker, ), defender=defender, player_taking_action=attacker)
 
 
 def _refill_cards(state: DurakGameState) -> DurakGameState:
@@ -268,13 +276,7 @@ def _refill_cards(state: DurakGameState) -> DurakGameState:
     while len(hands[state.defender]) < 6 and len(deck):
         hands[state.defender].append(deck.pop())
     hands = tuple(tuple(hands[i]) for i in range(3))
-    attacker = state.defender if not state.defender_has_taken else state.defender + 1
-    if len(hands[attacker]) == 0:
-        attacker = (attacker + 1) % len(state.player_hands)
-    defender = (attacker + 1) % len(state.player_hands)
-    if len(hands[defender]) == 0:
-        defender = (defender + 1) % len(state.player_hands)
-    return state._replace(deck=tuple(deck), player_hands=hands, attackers=(attacker, ), defender=defender, player_taking_action=attacker)
+    return state._replace(deck=tuple(deck), player_hands=hands)
 
 
 def _check_is_done(state: DurakGameState) -> DurakGameState:
@@ -330,6 +332,9 @@ def step(state: DurakGameState, action_id: DurakAction) -> DurakGameState:
     """
     Takes a state and an action id and returns a new state with the action applied.
     """
+    if action_id not in get_legal_actions(state):
+        raise ValueError("Invalid action id: {}".format(action_id))
+
     if DurakAction.is_attack(action_id):
         state = step_attack_action(state, action_id)
     elif DurakAction.is_defend(action_id):
@@ -342,7 +347,7 @@ def step(state: DurakGameState, action_id: DurakAction) -> DurakGameState:
         state = step_stop_attack_action(state)
     else:
         raise ValueError("Invalid action id: {}".format(action_id))
-    state = _post_step(state)
+    state = _check_is_done(state)
     return state
 
 
@@ -350,8 +355,6 @@ def _get_defender_actions(state: DurakGameState) -> List[DurakAction]:
     """
     Returns a tuple of legal action ids for the defender.
     """
-    if state.is_done:
-        return []
     actions = []
     if not state.defender_has_taken:
         actions.append(DurakAction.take_action())
@@ -392,7 +395,7 @@ def _get_attack_actions(state: DurakGameState) -> List[DurakAction]:
     return actions
 
 
-def _get_legal_actions(state: DurakGameState) -> List[DurakAction]:
+def get_legal_actions(state: DurakGameState) -> List[DurakAction]:
     """
     Returns a tuple of legal action ids for the player taking action.
     """
@@ -449,7 +452,7 @@ class GameRunner:
         Takes a step in the game by querying the player for an action and updating the game state
         """
         state = self.history[-1]
-        actions = _get_legal_actions(state)
+        actions = get_legal_actions(state)
         information_state = self.get_historical_states(state.player_taking_action)
         action_id = self.players[state.player_taking_action].choose_action(information_state, actions)
         return self._do_step(action_id)
@@ -460,5 +463,5 @@ class GameRunner:
         """
         state = self.history[-1]
         while not state.is_done:
-            self.step()
+            state = self.step()
         return _rewards(state)

@@ -37,8 +37,8 @@ class DurakDeck:
         return str(self.deck)
 
     @classmethod
-    def deck_without(cls, cards: List[Card]):
-        deck = cls(6, np.random.RandomState())
+    def deck_without(cls, cards: List[Card], seed: int = 0):
+        deck = cls(6, np.random.RandomState(seed))
         for card in cards:
             deck.deck.remove(card)
         return deck

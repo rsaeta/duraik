@@ -87,7 +87,6 @@ class DurakGameState(NamedTuple):
     stopped_attacking: Tuple[int, ...]
     player_taking_action: int
     graveyard: Tuple[Card, ...]
-    # in_players: Tuple[int, ...]
     is_done: bool
     round_over: bool
 
