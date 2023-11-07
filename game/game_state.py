@@ -1,4 +1,8 @@
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Tuple, Literal
+import numpy as np
+
+
+Card = Tuple[Literal['S', 'H', 'D', 'C'], int]
 
 
 class ObservableDurakGameState(NamedTuple):
@@ -64,6 +68,67 @@ GameState(
             self.defender_has_taken,
             self.stopped_attacking,
         ))
+
+
+class DurakGameState(NamedTuple):
+    """
+    This dataclass encompasses the entire game state of a Durak game from which we can generate
+    ObservableDurakGameState for each given player.
+    """
+    np_rand: np.random.RandomState
+    defender_has_taken: bool
+    deck: Tuple[Card, ...]
+    visible_card: Card
+    attackers: Tuple[int, ...]
+    defender: int
+    player_hands: Tuple[Tuple[Card, ...], ...]
+    attack_table: Tuple[Card, ...]
+    defend_table: Tuple[Card, ...]
+    stopped_attacking: Tuple[int, ...]
+    player_taking_action: int
+    graveyard: Tuple[Card, ...]
+    is_done: bool
+    round_over: bool
+
+    def potential_attackers(self):
+        defender = self.defender
+        attackers = [(defender + i) % len(self.player_hands) for i in [1, -1]]
+        if not len(self.deck):
+            attackers = list(filter(lambda x: len(self.player_hands[x]), attackers))
+        return attackers
+
+    def in_players(self):
+        return tuple(i for i, hand in enumerate(self.player_hands) if len(hand) > 0 or len(self.deck))
+
+    def num_undefended(self):
+        return len(self.attack_table) - len(self.defend_table)
+
+    def attackers_with_cards(self):
+        return tuple(a for a in self.attackers if len(self.player_hands[a]) > 0)
+
+    def observable(self, player_id: int) -> ObservableDurakGameState:
+        """
+        Creates an ObservableDurakGameState instance from the point of view of player_id
+        """
+        hand = self.player_hands[player_id]
+        num_cards_in_hands = tuple(len(hand) for hand in self.player_hands)
+        return ObservableDurakGameState(
+            player_id=player_id,
+            hand=tuple(hand),
+            visible_card=self.visible_card,
+            attack_table=tuple(self.attack_table),
+            defend_table=tuple(self.defend_table),
+            num_cards_left_in_deck=len(self.deck),
+            num_cards_in_hands=num_cards_in_hands,
+            graveyard=tuple(self.graveyard),
+            is_done=self.is_done,
+            lowest_rank=self.visible_card[1],
+            attackers=tuple(self.attackers),
+            defender=self.defender,
+            acting_player=self.player_taking_action,
+            defender_has_taken=self.defender_has_taken,
+            stopped_attacking=tuple(self.stopped_attacking),
+        )
 
 
 class GameTransition(NamedTuple):

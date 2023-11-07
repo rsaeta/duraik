@@ -1,5 +1,6 @@
 from game import DurakGame
 from agents import RandomPlayer, MCTSPlayer, HumanPlayer
+import numpy as np
 
 
 def main(*args, **kwargs):
@@ -15,8 +16,10 @@ def main(*args, **kwargs):
     while not game.is_done:
         transition = game.step()
     print(game.players)
-    print(transition)
+    #print(transition)
 
 
 if __name__ == '__main__':
-    main()
+    for i in range(100):
+        np.random.seed(0)
+        main()

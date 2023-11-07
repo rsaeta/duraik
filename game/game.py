@@ -4,7 +4,7 @@ import numpy as np
 from typing import Optional, List, Tuple, Literal
 
 from .actions import DurakAction
-from .game_state import ObservableDurakGameState, GameTransition
+from .game_state import ObservableDurakGameState, GameTransition, DurakGameState
 
 
 class DurakDeck:
@@ -65,6 +65,7 @@ class DurakGame:
         self.player_taking_action: Optional[int] = None  # the player taking action
         self.is_done: bool = False  # whether the game is done
         self.graveyard: Optional[List[tuple]] = None  # list of cards in the graveyard
+        self.history: List[DurakGameState] = None
 
     def configure(self, game_config):
         self.num_players = game_config.get('game_num_players', 3)
@@ -114,32 +115,14 @@ class DurakGame:
         self.graveyard = []
         self.is_done = False
         self.defender_has_taken = False
+        self.history = [self.current_state()]
 
     def get_observable_state(self, player_id: int) -> ObservableDurakGameState:
         """
         Gets the state of the game observable to that player's perspective.
         :return: ObservableDurakGameState
         """
-        player = self.players[player_id]
-        # actions = self.get_legal_actions(player_id)
-        return ObservableDurakGameState(
-            player_id=player_id,
-            hand=tuple(player.hand),
-            visible_card=self.visible_card,
-            attack_table=tuple(self.attack_table),
-            defend_table=tuple(self.defend_table),
-            num_cards_left_in_deck=len(self.deck.deck),
-            num_cards_in_hands=tuple(len(p.hand) for p in self.players),
-            graveyard=tuple(self.graveyard),
-            is_done=self.is_done,
-            lowest_rank=self.lowest_card,
-            attackers=tuple(self.attackers),
-            defender=self.defender,
-            acting_player=self.player_taking_action,
-            defender_has_taken=self.defender_has_taken,
-            stopped_attacking=tuple(self.stopped_attacking),
-            # available_actions=tuple(actions),
-        )
+        return self.current_state().observable(player_id)
 
     def state_per_player(self) -> List[ObservableDurakGameState]:
         """
@@ -171,6 +154,27 @@ class DurakGame:
                 print('done')
             transition = GameTransition(prev_state, action, reward, new_state)
             player.observe(transition)
+
+    def current_state(self) -> DurakGameState:
+        """
+        Creates a new DurakGameState from the current state of the game.
+        """
+        return DurakGameState(
+            player_hands=tuple(tuple(player.hand) for player in self.players),
+            visible_card=self.visible_card,
+            attack_table=tuple(self.attack_table),
+            defend_table=tuple(self.defend_table),
+            graveyard=tuple(self.graveyard),
+            attackers=tuple(self.attackers),
+            defender=self.defender,
+            player_taking_action=self.player_taking_action,
+            defender_has_taken=self.defender_has_taken,
+            stopped_attacking=tuple(self.stopped_attacking),
+            is_done=self.is_done,
+            deck=tuple(self.deck.deck),
+            np_rand=self.np_random,
+            round_over=False,
+        )
 
     def _give_defender_table_cards(self):
         """
