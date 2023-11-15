@@ -5,23 +5,15 @@ import torch
 from torch import nn
 
 import numpy as np
-from game import (ObservableDurakGameState, GameTransition, DurakAction)
+from three_game import (ObservableDurakGameState, GameTransition, DurakAction)
 
 
 class DurakPlayer:
 
-    def __init__(self, player_id, hand=None):
+    def __init__(self, player_id):
         self.player_id = player_id
-        self.hand = [] if hand is None else hand
 
-    def remove_card(self, card):
-        if card not in self.hand:
-            raise ValueError('Card {} not in hand {}'.format(card, self.hand))
-        self.hand.remove(card)
-
-    def add_card(self, card):
-        self.hand.append(card)
-
+    """
     def can_defend_with(self, card, trump_suit):
         suit, rank = card
         defensible_cards = []
@@ -39,6 +31,7 @@ class DurakPlayer:
             if r == rank:
                 passable_cards.add((s, r))
         return passable_cards
+    """
 
     def choose_action(self, state: ObservableDurakGameState, actions: List[int]):
         raise NotImplementedError('Player must implement choose_action method')
@@ -47,7 +40,7 @@ class DurakPlayer:
         pass
 
     def __str__(self):
-        return f"{self.__class__.__name__}({str(self.hand)})"
+        return f"{self.__class__.__name__}"
 
     def __repr__(self):
         return str(self)
@@ -58,20 +51,21 @@ class DurakPlayer:
 
 class RandomPlayer(DurakPlayer):
 
-    def __init__(self, player_id, hand=None):
-        super().__init__(player_id, hand=hand)
+    def __init__(self, player_id):
+        super().__init__(player_id)
         self.np_random = np.random.RandomState()
 
     def choose_action(self, state, actions):
-        return self.np_random.choice(actions)
+        return actions[self.np_random.choice(len(actions))]
 
 
 class HumanPlayer(DurakPlayer):
 
     def choose_action(self, state, actions):
         print('State:')
-        pprint.pprint(state)
-        print('Actions: {}'.format(list(map(DurakAction.action_to_string, actions))))
+        pprint.pprint(state[-1])
+        actions = sorted(actions)
+        print('Actions: {}'.format(actions))
         action = -1
         while action not in range(len(actions)):
             try:

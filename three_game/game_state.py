@@ -7,7 +7,7 @@ Card = Tuple[Literal['S', 'H', 'D', 'C'], int]
 
 class ObservableDurakGameState(NamedTuple):
     """
-    DurakGameState is an immutable data structure that stores the state of the game.
+    DurakGameState is an immutable data structure that stores the state of the three_game.
     Because it uses immutable data structures, it should be hashable easily.
     """
     player_id: int  # ID of player
@@ -18,7 +18,7 @@ class ObservableDurakGameState(NamedTuple):
     num_cards_left_in_deck: int  # number of cards left in the deck
     num_cards_in_hands: Tuple[int]  # number of cards left in the opponent's hand
     graveyard: Tuple[tuple]  # list of cards in the graveyard
-    is_done: bool  # whether the game is done
+    is_done: bool  # whether the three_game is done
     lowest_rank: int  # the lowest card in the deck
     attackers: Tuple[int]  # list of attackers
     defender: int  # defender
@@ -72,7 +72,7 @@ GameState(
 
 class DurakGameState(NamedTuple):
     """
-    This dataclass encompasses the entire game state of a Durak game from which we can generate
+    This dataclass encompasses the entire three_game state of a Durak three_game from which we can generate
     ObservableDurakGameState for each given player.
     """
     np_rand: np.random.RandomState

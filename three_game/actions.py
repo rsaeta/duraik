@@ -11,21 +11,21 @@ class DurakAction(int):
     """
     lowest_card = 6
 
-    @staticmethod
-    def defend(card):
-        return DurakAction.defend_id_from_card(card)
+    @classmethod
+    def defend(cls, card):
+        return cls(DurakAction.defend_id_from_card(card))
 
-    @staticmethod
-    def attack(card):
-        return DurakAction.attack_id_from_card(card)
+    @classmethod
+    def attack(cls, card):
+        return cls(DurakAction.attack_id_from_card(card))
 
-    @staticmethod
-    def pass_with_card(card):
-        return DurakAction.pass_with_card_id_from_card(card)
+    @classmethod
+    def pass_with_card(cls, card):
+        return cls(DurakAction.pass_with_card_id_from_card(card))
 
-    @staticmethod
-    def stop_attacking():
-        return DurakAction.stop_attacking_action()
+    @classmethod
+    def stop_attacking(cls):
+        return cls(DurakAction.stop_attacking_action())
 
     @staticmethod
     def n(m=1):
@@ -99,9 +99,9 @@ class DurakAction(int):
         # 8 actions per rank, 4 suits attack/defend, take, stop_attacking, pass_with_card
         return DurakAction.n(4) * 3 + 3
 
-    @staticmethod
-    def take_action() -> int:
-        return DurakAction.num_actions() - 3
+    @classmethod
+    def take_action(cls) -> int:
+        return cls(DurakAction.num_actions() - 3)
 
     @staticmethod
     def stop_attacking_action() -> int:
@@ -114,16 +114,19 @@ class DurakAction(int):
     @staticmethod
     def action_to_string(action_id: int) -> str:
         if DurakAction.is_attack(action_id):
-            return 'attack {}'.format(DurakAction.card_from_attack_id(action_id))
+            return 'ATTACK({})'.format(DurakAction.card_from_attack_id(action_id))
         elif DurakAction.is_defend(action_id):
-            return 'defend {}'.format(DurakAction.card_from_defend_id(action_id))
+            return 'DEFEND({})'.format(DurakAction.card_from_defend_id(action_id))
         elif DurakAction.is_pass_with_card(action_id):
-            return 'pass {}'.format(DurakAction.card_from_pass_with_card_id(action_id))
+            return 'PASS({})'.format(DurakAction.card_from_pass_with_card_id(action_id))
         elif DurakAction.is_take(action_id):
-            return 'take'
+            return 'TAKE'
         elif DurakAction.is_stop_attacking(action_id):
-            return 'stop_attacking'
+            return 'STOP_ATTACK'
         elif DurakAction.is_noop(action_id):
-            return 'noop'
+            return 'NOOP'
         else:
             raise ValueError('Invalid action_id {}'.format(action_id))
+
+    def __repr__(self):
+        return DurakAction.action_to_string(self)

@@ -1,4 +1,4 @@
-from game import DurakGame, DurakAction, DurakDeck
+from three_game import DurakGame, DurakAction, DurakDeck
 from agents import RandomPlayer, MCTSPlayer
 from test_duraik_game import get_normal_random_game
 
@@ -23,7 +23,7 @@ def test_mcts():
     game.attackers = [0]
     game.is_done = False
     game.deck.deck = []
-    game.graveyard = DurakDeck.deck_without(hands[0] + hands[1] + hands[2]).deck
+    game.graveyard = DurakDeck.deck_without(hands[0] + hands[1] + hands[2]).new_deck
     game.step()
 
 if __name__ == '__main__':

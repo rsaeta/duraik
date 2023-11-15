@@ -4,8 +4,8 @@ from typing import List
 import numpy as np
 
 from agents.easy_agents import DurakPlayer, RandomPlayer
-from game.game_state import ObservableDurakGameState
-from game import DurakGame, DurakDeck
+from three_game.game_state import ObservableDurakGameState
+from three_game import DurakGame, DurakDeck
 
 
 def simulate(state, action: int, ret_first_obs: bool = False):
@@ -73,7 +73,7 @@ class MCTSNode:
 class MCTSPlayer(DurakPlayer):
     """
     Monte-Carlo Tree-search player that guesses the best move based on
-    randomized rollouts of the game. To do so, it must reconstruct a random game
+    randomized rollouts of the three_game. To do so, it must reconstruct a random three_game
     from the observational state and run many randomized rollouts for each possible
     action, picking the one with the best randomized rollouts in terms of expectation.
     """
@@ -119,7 +119,7 @@ class MCTSPlayer(DurakPlayer):
     def choose_action(self, state: ObservableDurakGameState, actions: List[int]):
         """
         Chooses an action based on the state and possible actions.
-        :param state: The state of the game.
+        :param state: The state of the three_game.
         :param actions: The possible actions.
         :return: The chosen action.
         """
@@ -183,7 +183,7 @@ def get_deck_and_hands_from_state(state: ObservableDurakGameState):
 
 def random_game_from_observation_state(state: ObservableDurakGameState) -> DurakGame:
     """
-    Create a game from an observable state of the game according to a player's
+    Create a three_game from an observable state of the three_game according to a player's
     perspective. This will be helpful for MCTS agent. The idea here is public
     knowledge must stay the same (attack board, defend board, graveyard, visible
     card) and private knowledge to the player must be the same (hand, number of
