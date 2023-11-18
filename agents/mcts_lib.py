@@ -1,6 +1,6 @@
 import mcts_simple
 from .easy_agents import RandomPlayer
-from game import DurakGame, DurakAction
+from three_game import DurakGame, DurakAction
 
 from typing import List
 

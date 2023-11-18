@@ -2,7 +2,7 @@
 This file tests the Durak Game engine
 """
 
-from game import DurakGame, DurakAction, DurakDeck
+from three_game import DurakGame, DurakAction, DurakDeck
 from agents import RandomPlayer
 
 
@@ -34,7 +34,7 @@ def test_game_ending_easy():
     game.attackers = [2]
     game.is_done = False
     game.deck.deck = []
-    game.graveyard = DurakDeck.deck_without(hands[0] + hands[1] + hands[2]).deck
+    game.graveyard = DurakDeck.deck_without(hands[0] + hands[1] + hands[2]).new_deck
 
     assert game.get_legal_actions(game.player_taking_action) == [DurakAction.attack_id_from_card(('S', 8))]
     game.step()
@@ -73,7 +73,7 @@ def test_passing():
     game.attackers = [0]
     game.is_done = False
     game.deck.deck = []
-    game.graveyard = DurakDeck.deck_without(hands[0] + hands[1] + hands[2]).deck
+    game.graveyard = DurakDeck.deck_without(hands[0] + hands[1] + hands[2]).new_deck
 
     assert set(game.legal_actions()) == {DurakAction.attack(('S', 6)),
                                          DurakAction.attack(('H', 12)),
