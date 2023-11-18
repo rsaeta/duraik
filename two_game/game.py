@@ -1,20 +1,12 @@
 """
 An implementation of the game engine for heads-up Durak
 """
-import gym
 import numpy as np
-
 from typing import Tuple, NamedTuple, Literal, Collection, List, Set
+import torch
+from pathlib import Path
+import os
 from three_game import DurakAction
-
-
-class GameEnv(gym.Env):
-
-    def __init__(self):
-        self.action_space = gym.spaces.Discrete(DurakAction.num_actions())
-        self.observation_space = gym.spaces.Box(
-
-
 
 
 class Card(NamedTuple):
@@ -31,6 +23,26 @@ class Card(NamedTuple):
 Deck = Collection[Card]
 
 
+def num_actions() -> int:
+    """
+    Returns the number of actions
+    """
+    ncards = 9 * 4
+    n_actions = (
+        ncards * 3
+    )  # Each card can be played as either an attack, a defend, or a pass
+    n_actions += 1  # +1 for the stop attacking action
+    n_actions += 1  # +1 for the take action
+    return n_actions
+
+
+def observable_state_shape() -> Tuple[int, ...]:
+    """
+    Returns the dimensions of the state space.
+    """
+    return new_state(0).observable(0).to_array().shape
+
+
 def many_hot(total: int, idxs: List[int]):
     """
     Creates a many-hot encoding of the idxs.
@@ -40,7 +52,9 @@ def many_hot(total: int, idxs: List[int]):
     return zeros
 
 
-def new_deck(lowest_rank: int, rand: np.random.RandomState, shuffle: bool = True) -> List[Card]:
+def new_deck(
+    rand: np.random.RandomState, lowest_rank: int = 6, shuffle: bool = True
+) -> List[Card]:
     """
     Creates a deck of cards
     """
@@ -59,9 +73,20 @@ def cards_to_input_array(cards: Collection[Tuple[Card, ...]]):
     :param cards: The cards to convert.
     :return: A 1D array of the cards.
     """
-    card_ids = np.array([DurakAction.ext_from_card(card) for card in cards], dtype=np.int32)
+    card_ids = np.array(
+        [DurakAction.ext_from_card(card) for card in cards], dtype=np.int32
+    )
     num_cards = DurakAction.n(4)
     return many_hot(num_cards, card_ids)
+
+
+def input_array_to_cards(array: np.array) -> Tuple[Card, ...]:
+    """
+    This is the reverse of cards_to_input_array where given a many-hot
+    encoding of cards as an np.array, this will reconstruct a collection
+    of cards that that represents.
+    """
+    return tuple(DurakAction.card_from_ext(ext) for ext in np.where(array)[0])
 
 
 class ObservableGameState(NamedTuple):
@@ -76,30 +101,93 @@ class ObservableGameState(NamedTuple):
     defender: int
     defender_has_taken: bool
     cards_in_opponent: int
+    player_id: int
 
     def to_array(self) -> np.array:
         """
         Transforms the observable game state into a 1-D numpy array.
+        For elements defender_arr and acting_arr, we use a many-hot
+        encoding since these sparse inputs make it easier for the
+        network to differentiate between players, rather than providing
+        the index as a single integer. Similarly, the one_hot acting_arr
+        and defender_arr are used to encode the player taking action and
+        the defender where the first element is 1 if the current player
+        is those things, otherwise the second element is 1. This reduces
+        some redundancy in the state space and keeps things relative
+        to the current player rather than dependent on player_id.
         """
         hand_arr = cards_to_input_array(self.hand)
         attack_table_arr = cards_to_input_array(self.attack_table)
         defend_table_arr = cards_to_input_array(self.defend_table)
         graveyard_arr = cards_to_input_array(self.graveyard)
-        defender_arr = many_hot(2, [self.defender])
-        acting_arr = many_hot(2, [self.player_taking_action])
-        return np.concatenate([
-            np.array([self.cards_in_deck]),
-            hand_arr,
-            cards_to_input_array([self.visible_card]),
-            attack_table_arr,
-            defend_table_arr,
-            graveyard_arr,
-            np.array([self.is_done]),
-            acting_arr,
-            defender_arr,
-            np.array([self.defender_has_taken]),
-            np.array([self.cards_in_opponent]),
-        ])
+        defender_idx = 0 if self.defender == self.player_id else 1
+        acting_idx = 0 if self.player_taking_action == self.player_id else 1
+        defender_arr = np.array([0, 0])
+        defender_arr[defender_idx] = 1
+        acting_arr = np.array([0, 0])
+        acting_arr[acting_idx] = 1
+        player_id_arr = many_hot(2, [self.player_id])
+        return np.concatenate(
+            [
+                player_id_arr,
+                np.array([self.cards_in_deck]),
+                hand_arr,
+                cards_to_input_array([self.visible_card]),
+                attack_table_arr,
+                defend_table_arr,
+                graveyard_arr,
+                np.array([self.is_done]),
+                acting_arr,
+                defender_arr,
+                np.array([self.defender_has_taken]),
+                np.array([self.cards_in_opponent]),
+            ]
+        )
+
+    @classmethod
+    def from_array(cls, array: np.array) -> "ObservableGameState":
+        """
+        This is the reverse of to_array. Given an array, the output of which
+        is the input to to_array, this will return the original observable
+        state.
+        """
+        player_id = int(np.where(array[:2])[0][0])
+        array = array[2:]
+        cards_in_deck = int(array[0])
+        array = array[1:]
+        hand = input_array_to_cards(array[: DurakAction.n(4)])
+        array = array[DurakAction.n(4) :]
+        visible_card = input_array_to_cards(array[: DurakAction.n(4)])[0]
+        array = array[DurakAction.n(4) :]
+        attack_table = input_array_to_cards(array[: DurakAction.n(4)])
+        array = array[DurakAction.n(4) :]
+        defend_table = input_array_to_cards(array[: DurakAction.n(4)])
+        array = array[DurakAction.n(4) :]
+        graveyard = input_array_to_cards(array[: DurakAction.n(4)])
+        array = array[DurakAction.n(4) :]
+        is_done = bool(array[0])
+        array = array[1:]
+        player_taking_action = int(player_id if array[0] else (player_id + 1) % 2)
+        array = array[2:]
+        defender = int(player_id if array[0] else (player_id + 1) % 2)
+        array = array[2:]
+        defender_has_taken = bool(array[0])
+        array = array[1:]
+        cards_in_opponent = int(array[0])
+        return cls(
+            cards_in_deck=cards_in_deck,
+            hand=hand,
+            visible_card=visible_card,
+            attack_table=attack_table,
+            defend_table=defend_table,
+            graveyard=graveyard,
+            is_done=is_done,
+            player_taking_action=player_taking_action,
+            defender=defender,
+            defender_has_taken=defender_has_taken,
+            cards_in_opponent=cards_in_opponent,
+            player_id=player_id,
+        )
 
 
 class GameState(NamedTuple):
@@ -107,6 +195,7 @@ class GameState(NamedTuple):
     DurakGameState is an immutable data structure that stores the state of the game.
     Because it uses immutable data structures, it should be hashable easily.
     """
+
     deck: Tuple[Card, ...]
     hands: Tuple[Tuple[Card, ...], Tuple[Card, ...]]  # list of cards in hand
     visible_card: Card  # the visible card on the table determining the trump suit
@@ -127,6 +216,7 @@ class GameState(NamedTuple):
         """
         opponent = (player_id + 1) % 2
         return ObservableGameState(
+            player_id=player_id,
             cards_in_deck=len(self.deck),
             hand=self.hands[player_id],
             visible_card=self.visible_card,
@@ -141,7 +231,9 @@ class GameState(NamedTuple):
         )
 
 
-def _initial_attacker(hands: Tuple[Card, ...], trump_suit: Card.suit, rand: np.random.RandomState) -> int:
+def _initial_attacker(
+    hands: Tuple[Card, ...], trump_suit: Card.suit, rand: np.random.RandomState
+) -> int:
     min_trump = 20
     min_player = -1
     for i, hand in enumerate(hands):
@@ -159,7 +251,7 @@ def new_state(seed: int = 0, lowest_rank: int = 9):
     Creates a new game state
     """
     rand = np.random.RandomState(seed)
-    d = new_deck(lowest_rank, rand)
+    d = new_deck(rand, lowest_rank)
     hands = tuple([[d.pop() for _ in range(6)] for _ in range(2)])
     visible_card = d[0]
     attack_table = ()
@@ -232,7 +324,9 @@ def _step_stop_attacking(state: GameState) -> GameState:
     """
     In heads up, as soon as a player stops attacking, the defender must defend.
     """
-    if state.defender_has_taken:  # Here the attacker has added all the cards they want and the defender takes
+    if (
+        state.defender_has_taken
+    ):  # Here the attacker has added all the cards they want and the defender takes
         new_state = _give_defender_cards(state)
         new_state = new_state._replace(defender_has_taken=False)
     elif state.num_undefended():
@@ -337,6 +431,7 @@ def _step_take(state: GameState) -> GameState:
         new_state = state._replace(defender_has_taken=True)
         return _swap_acting_player(new_state)
     new_state = _give_defender_cards(state)
+    new_state = _refill_player_hands(new_state)
     new_state = new_state._replace(defender_has_taken=False)
     return _swap_acting_player(new_state)
 
@@ -346,7 +441,6 @@ def _legal_defense_actions(state: GameState) -> List[DurakAction]:
     Gets a list of actions available to the defender
     """
     if not state.num_undefended():
-        print("What the fuck")
         return []
     card_to_defend = state.attack_table[len(state.defend_table)]
     trump_suit = state.visible_card.suit
@@ -374,7 +468,11 @@ def _legal_attack_actions(state: GameState) -> List[DurakAction]:
     if not len(state.attack_table):
         return [DurakAction.attack(c) for c in state.hands[state.player_taking_action]]
     ranks_on_table = _ranks(state.attack_table).union(_ranks(state.defend_table))
-    actions = [DurakAction.attack(c) for c in state.hands[state.player_taking_action] if c.rank in ranks_on_table]
+    actions = [
+        DurakAction.attack(c)
+        for c in state.hands[state.player_taking_action]
+        if c.rank in ranks_on_table
+    ]
     actions.append(DurakAction.stop_attacking())
     return actions
 
@@ -401,10 +499,12 @@ def _check_done(state: GameState) -> bool:
     return 0 in set(len(h) for h in state.hands)
 
 
-def step(state: GameState, action: DurakAction):
+def step(state: GameState, action: DurakAction) -> GameState:
     """
     Take a step in the game according to current state and action
     """
+    if action not in legal_actions(state):
+        raise ValueError("Invalid action", action)
     if DurakAction.is_attack(action):
         new_state = _step_attack(state, action)
     elif DurakAction.is_stop_attacking(action):
@@ -419,9 +519,10 @@ def step(state: GameState, action: DurakAction):
 
 
 class GameRunner:
-
     def __init__(self):
-        self.history = []
+        self.state_history = []  # Holds a list of perfect-information states
+        self.action_history = []  # Holds a list of actions taken by player
+        self.reward_history = []  # Holds a list of tuples of rewards for each player
         self.agents = [None, None]
 
     def set_agent(self, idx, agent):
@@ -435,18 +536,68 @@ class GameRunner:
         self.agents = agents
 
     def reset(self):
-        self.history = []
+        self.state_history = []
 
-    def run(self, seed=0) -> Tuple[float, float]:
-        state = new_state(seed)
+    def save_run(self, save_dir: Path):
+        """
+        Saves the history of the game to a directory in 3 different files.
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        self.save_observable_history(save_dir / "obs.npy")
+        self.save_reward_history(save_dir / "rewards.npy")
+        self.save_action_history(save_dir / "actions.npy")
+        with open(save_dir / "configs.json", "w") as f:
+            f.write(str(self.agents))
+
+    def save_reward_history(self, path: Path):
+        np.save(path, np.array(self.reward_history))
+
+    def save_action_history(self, path: Path):
+        np.save(path, np.array(self.action_history))
+
+    def save_observable_history(self, path: Path):
+        """
+        Saves the sequence of observable states for both players to a file as an
+        np.ndarray with dimensions (num_players, sequence_length, *observable_state_shape)
+        """
+        seq_len = len(self.state_history)
+        obs_shape = observable_state_shape()
+        obs = np.zeros((2, seq_len, *obs_shape))
+        for i, state in enumerate(self.state_history):
+            obs[:, i, :] = (
+                state.observable(0).to_array(),
+                state.observable(1).to_array(),
+            )
+        np.save(path, obs)
+
+    def get_information_state(self, player_id) -> List[ObservableGameState]:
+        """
+        Returns the information state of the player
+        """
+        return [state.observable(player_id) for state in self.state_history]
+
+    def step(self) -> GameState:
         if any(agent is None for agent in self.agents):
             raise ValueError("Agent is None")
+        state = self.state_history[-1]
+        actions = legal_actions(state)
+        if not len(actions):
+            return
+        information_state = self.get_information_state(state.player_taking_action)
+        action = self.agents[state.player_taking_action].choose_action(
+            information_state[-1], actions, full_state=information_state
+        )
+        state = step(state, action)
+        self.state_history.append(state)
+        self.action_history.append(action)
+        self.reward_history.append(rewards(state))
+        return state
+
+    def run(self, seed=0) -> Tuple[float, float]:
+        self.state_history = [new_state(seed)]
+        if any(agent is None for agent in self.agents):
+            raise ValueError("Agent is None")
+        state = self.state_history[-1]
         while not state.is_done:
-            self.history.append(state)
-            if self.agents[state.player_taking_action] is None:
-                raise ValueError("Agent for player {} is None".format(state.player_taking_action))
-            actions = legal_actions(state)
-            action = self.agents[state.player_taking_action].choose_action(state, actions)
-            state = step(state, action)
-        self.history.append(state)
+            state = self.step()
         return rewards(state)

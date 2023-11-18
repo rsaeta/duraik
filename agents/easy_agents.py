@@ -5,11 +5,10 @@ import torch
 from torch import nn
 
 import numpy as np
-from three_game import (ObservableDurakGameState, GameTransition, DurakAction)
+from three_game import ObservableDurakGameState, GameTransition, DurakAction
 
 
 class DurakPlayer:
-
     def __init__(self, player_id):
         self.player_id = player_id
 
@@ -33,11 +32,13 @@ class DurakPlayer:
         return passable_cards
     """
 
-    def choose_action(self, state: ObservableDurakGameState, actions: List[int]):
-        raise NotImplementedError('Player must implement choose_action method')
-
-    def update(self):
-        pass
+    def choose_action(
+        self,
+        current_state: ObservableDurakGameState,
+        actions: List[DurakAction],
+        full_state: List[ObservableDurakGameState] = None,
+    ) -> DurakAction:
+        raise NotImplementedError("Player must implement choose_action method")
 
     def __str__(self):
         return f"{self.__class__.__name__}"
@@ -50,29 +51,26 @@ class DurakPlayer:
 
 
 class RandomPlayer(DurakPlayer):
-
     def __init__(self, player_id):
         super().__init__(player_id)
         self.np_random = np.random.RandomState()
 
-    def choose_action(self, state, actions):
+    def choose_action(self, state, actions, full_state=None):
         return actions[self.np_random.choice(len(actions))]
 
 
 class HumanPlayer(DurakPlayer):
-
-    def choose_action(self, state, actions):
-        print('State:')
+    def choose_action(self, state, actions, full_state=None):
+        print("State:")
         pprint.pprint(state[-1])
         actions = sorted(actions)
-        print('Actions: {}'.format(actions))
+        print("Actions: {}".format(actions))
         action = -1
         while action not in range(len(actions)):
             try:
-                action = int(input('Choose action: '))
+                action = int(input("Choose action: "))
             except ValueError:
                 action = -1
             if action not in range(len(actions)):
-                print('Invalid action {}'.format(action))
+                print("Invalid action {}".format(action))
         return actions[action]
-

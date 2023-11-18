@@ -159,7 +159,7 @@ class DurakGame:
         information_state = [state.observable(player_id) for state in self.history]
         actions = self.get_legal_actions(player_id)
         player = self.players[player_id]
-        action = player.choose_action(information_state, actions)
+        action = player.choose_action(information_state[-1], actions, full_state=information_state)
 
         self._do_step(player_id, action)
         new_state = self.current_state()
