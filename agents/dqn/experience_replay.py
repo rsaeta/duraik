@@ -62,17 +62,25 @@ class DirectoryBasedExperiencedReplayWithHistory(ExperienceReplay):
         starting_index = np.random.randint(seq_len - 1)
         print(f"Sampling from starting index {starting_index}")
         ending_index = self._find_ending_index(obs, starting_index)
+
+        obs_state = ObservableGameState.from_array(obs[0, ending_index, :])
+        acting_player = obs_state.player_taking_action
+
         print(
-            f"Ending index is {ending_index} with acting player {obs_state.player_taking_action} and action {actions[starting_index]}"
+            f"Ending index is {ending_index} with acting player"
+            f" {obs_state.player_taking_action} and action {actions[starting_index]}"
         )
         # Now either ending_index is the end of the game, or the acting player is the same as starting index
         s = obs[acting_player, :starting_index, :]  # [starting_index, *obs_shape]
         s_prime = obs[acting_player, :ending_index, :]  # [ending_index, *obs_shape]
 
-        assert s_prime.shape == (s.shape[0] + (ending_index - starting_index), s.shape[1])
+        assert s_prime.shape == (
+            s.shape[0] + (ending_index - starting_index),
+            s.shape[1],
+        )
 
         a = actions[starting_index]
-        r = rewards[ending_index]
+        r = rewards[ending_index - 1]
         return s, a, r, s_prime
 
     def _find_sample_directory(self):
@@ -100,10 +108,7 @@ class DirectoryBasedExperiencedReplayWithHistory(ExperienceReplay):
         acting_player = init_obs_state.player_taking_action
         ending_index = starting_index + 1
         obs_state = ObservableGameState.from_array(obs[0, ending_index, :])
-        while (
-                not obs_state.is_done
-                and obs_state.player_taking_action != acting_player
-        ):
+        while not obs_state.is_done and obs_state.player_taking_action != acting_player:
             ending_index += 1
             obs_state = ObservableGameState.from_array(obs[0, ending_index, :])
         return ending_index
