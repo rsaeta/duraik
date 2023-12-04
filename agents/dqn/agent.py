@@ -6,9 +6,21 @@ from typing import List
 import torch
 from torch import nn
 
+from dataclasses import dataclass
+
 from ..easy_agents import DurakPlayer
 from two_game import num_actions, observable_state_shape, ObservableGameState, DurakAction
 from .experience_replay import ExperienceReplay
+
+
+@dataclass
+class UpdateArgs:
+    optimizer: torch.optim.Optimizer
+    scheduler: torch.optim.lr_scheduler._LRScheduler
+    loss_fn: nn.Module
+    replay: ExperienceReplay
+    batch_size: int  # number of updates to do per batch
+    gamma: float  # discount factor used for TD error
 
 
 class LSTMHistoryEncoder(nn.Module):
@@ -27,7 +39,7 @@ class LSTMHistoryEncoder(nn.Module):
         :param history: A tensor of shape [seq_len, *observation_shape] where seq_len is the length of the history
         :return: A tensor of shape [latent_dim] representing the latent belief state.
         """
-        return self.lstm(history)
+        return self.lstm(history)[0][-1]
 
 
 class QNetwork(nn.Module):
@@ -67,7 +79,7 @@ class DQAgentWithHistory(nn.Module):
         self,
         n_actions: int,
         state_shape: torch.Size,
-         max_history_len: int = 512,  # could be used if we want to use a transformer instead of an LSTM
+        max_history_len: int = 512,  # could be used if we want to use a transformer instead of an LSTM
         latent_dim: int = 128,
         history_encoder_type: str = "LSTM",
         q_network_depth: int = 2,
@@ -91,7 +103,7 @@ class DQAgentWithHistory(nn.Module):
 
         :return: A tensor of shape [num_actions] representing the Q-values for all actions.
         """
-        latent_belief, _ = self.history_encoder(observation_history)
+        latent_belief = self.history_encoder(observation_history)
         return self.q_network(latent_belief)
 
 
@@ -108,6 +120,7 @@ class DQNPlayer(DurakPlayer, nn.Module):
             num_actions(), torch.Size(observable_state_shape()), **agent_kwargs
         )
         self.epsilon = epsilon
+        self.loss = nn.MSELoss()
 
     def choose_action(
         self,
@@ -127,7 +140,55 @@ class DQNPlayer(DurakPlayer, nn.Module):
             return actions[torch.randint(len(actions), (1,)).item()]
 
         arr = torch.stack([torch.from_numpy(state.to_array()).to(torch.float) for state in full_state])
-        q_values = self.agent(arr)
+        q_values = self.agent(arr.cuda())
         # we need to filter the q_values for only legal actions provided in the actions argument
-        q_values = q_values[0, actions]
+        q_values = q_values[actions]
         return actions[q_values.argmax()]
+
+    def update(self, update_args: UpdateArgs):
+        """
+        This updates the agent using the given experience replay. For stabilization,
+        we will create a target network that is an exact copy of the current agent but
+        does not propagate gradients. We will then use this target network to compute
+        the target Q-values for the TD error.
+        """
+        optimizer = update_args.optimizer
+        scheduler = update_args.scheduler
+        experience_replay = update_args.replay
+        num_iters = update_args.batch_size
+        discount = update_args.gamma
+        loss_fn = update_args.loss_fn
+
+        target_dqn_agent = DQAgentWithHistory(
+            num_actions(), torch.Size(observable_state_shape())
+        )
+        target_dqn_agent.load_state_dict(self.agent.state_dict())
+        target_dqn_agent.eval().cuda()
+
+        cum_loss = torch.tensor(0., requires_grad=True).cuda()
+
+        optimizer.zero_grad()
+
+        for _ in range(num_iters):
+
+            s, a, r, s_prime = experience_replay.sample()
+            s = torch.from_numpy(s).to(torch.float).cuda()
+            a = torch.tensor(a).cuda()
+            r = torch.tensor(r).cuda()
+            s_prime = torch.from_numpy(s_prime).to(torch.float).cuda()
+
+            q_values = self.agent(s)
+
+            with torch.no_grad():
+                next_q_values = target_dqn_agent(s_prime)
+
+            q_values_prime_max = torch.max(next_q_values).item()
+            td_target = r + discount * q_values_prime_max
+
+            loss = loss_fn(q_values[a], td_target)  # minimize difference between calculated q-values and TD target
+
+            cum_loss = cum_loss + loss
+        print(f'Batch loss: {cum_loss.item()}')
+        cum_loss.backward()
+        optimizer.step()
+        scheduler.step()

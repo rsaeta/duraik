@@ -2,7 +2,7 @@
 An implementation of the game engine for heads-up Durak
 """
 import numpy as np
-from typing import Tuple, NamedTuple, Literal, Collection, List, Set
+from typing import Tuple, NamedTuple, Literal, Collection, List, Set, Optional
 import torch
 from pathlib import Path
 import os
@@ -192,7 +192,7 @@ class ObservableGameState(NamedTuple):
 
 class GameState(NamedTuple):
     """
-    DurakGameState is an immutable data structure that stores the state of the game.
+    GameState is an immutable data structure that stores the state of the game.
     Because it uses immutable data structures, it should be hashable easily.
     """
 
@@ -246,7 +246,7 @@ def _initial_attacker(
     return min_player
 
 
-def new_state(seed: int = 0, lowest_rank: int = 9):
+def new_state(seed: int = 0, lowest_rank: int = 9) -> GameState:
     """
     Creates a new game state
     """
@@ -582,7 +582,7 @@ class GameRunner:
         state = self.state_history[-1]
         actions = legal_actions(state)
         if not len(actions):
-            return
+            return state._replace(is_done=True)
         information_state = self.get_information_state(state.player_taking_action)
         action = self.agents[state.player_taking_action].choose_action(
             information_state[-1], actions, full_state=information_state
@@ -593,8 +593,11 @@ class GameRunner:
         self.reward_history.append(rewards(state))
         return state
 
-    def run(self, seed=0) -> Tuple[float, float]:
-        self.state_history = [new_state(seed)]
+    def run(
+        self, seed=0, init_state: Optional[GameState] = None
+    ) -> Tuple[float, float]:
+        init_state = init_state if init_state is not None else new_state(seed)
+        self.state_history = [init_state]
         if any(agent is None for agent in self.agents):
             raise ValueError("Agent is None")
         state = self.state_history[-1]

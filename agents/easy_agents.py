@@ -1,5 +1,5 @@
 import pprint
-from typing import List
+from typing import List, NamedTuple
 
 import torch
 from torch import nn
@@ -60,9 +60,9 @@ class RandomPlayer(DurakPlayer):
 
 
 class HumanPlayer(DurakPlayer):
-    def choose_action(self, state, actions, full_state=None):
+    def choose_action(self, state: NamedTuple, actions, full_state=None):
         print("State:")
-        pprint.pprint(state[-1])
+        pprint.pprint(state._asdict())
         actions = sorted(actions)
         print("Actions: {}".format(actions))
         action = -1
