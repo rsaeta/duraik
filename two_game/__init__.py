@@ -6,4 +6,5 @@ from .game import (
     ObservableGameState,
     GameState,
     Card,
+    new_state
 )

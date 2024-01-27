@@ -46,9 +46,9 @@ def main(seed, save_dir=None, run_game=True):
     dqn_agent.update(update_args)
 
     # save model, optimizer, and scheduler
-    torch.save(dqn_agent.state_dict(), 'dqn_agent.pt')
-    torch.save(optimizer.state_dict(), 'optimizer.pt')
-    torch.save(scheduler.state_dict(), 'scheduler.pt')
+    torch.save(dqn_agent.state_dict(), 'saved_models/heads_up_harder_9/dqn_agent.pt')
+    torch.save(optimizer.state_dict(), 'saved_models/heads_up_harder_9/optimizer.pt')
+    torch.save(scheduler.state_dict(), 'saved_models/heads_up_harder_9/scheduler.pt')
 
 
 if __name__ == '__main__':

@@ -23,6 +23,36 @@ class UpdateArgs:
     gamma: float  # discount factor used for TD error
 
 
+class TransformerHistoryEncoder(nn.Module):
+    """
+    This class is analagous to the LSTMHistoryEncoder but uses a Transformer
+    instead of an LSTM cell.
+    """
+
+    def __init__(self, observation_shape: torch.Size, depth: int = 6, max_history_len: int = 512):
+        super().__init__()
+        self.depth = depth
+        self.observation_shape = observation_shape
+        self.transformer = nn.TransformerEncoderLayer(d_model=observation_shape[0], nhead=8)
+        self.transformer_encoder = nn.TransformerEncoder(self.transformer, num_layers=depth)
+        self.pos_encoder = nn.Embedding(512, observation_shape[0])
+
+    def forward(self, history: torch.Tensor) -> torch.Tensor:
+        """
+        This takes in a history of observations and returns the final hidden state of the Transformer.
+        :param history: A tensor of shape [seq_len, *observation_shape] where seq_len is the length of the history
+        :return: A tensor of shape [latent_dim] representing the latent belief state.
+        """
+        seq_len = history.shape[0]
+        history = history.reshape(seq_len, *self.observation_shape)
+        pos = torch.arange(0, seq_len).unsqueeze(1)
+        pos = self.pos_encoder(pos)
+        history = history + pos
+        # mask out the parts of history that are unused
+        mask = torch.zeros
+        return self.transformer_encoder(history)
+
+
 class LSTMHistoryEncoder(nn.Module):
     """
     This class is responsible for generating a latent belief state from a history of observations using an LSTM
@@ -188,7 +218,7 @@ class DQNPlayer(DurakPlayer, nn.Module):
             loss = loss_fn(q_values[a], td_target)  # minimize difference between calculated q-values and TD target
 
             cum_loss = cum_loss + loss
-        print(f'Batch loss: {cum_loss.item()}')
+        # print(f'Batch loss: {cum_loss.item()}')
         cum_loss.backward()
         optimizer.step()
         scheduler.step()

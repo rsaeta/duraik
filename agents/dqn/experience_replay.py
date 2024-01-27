@@ -110,7 +110,9 @@ class DirectoryBasedExperiencedReplayWithHistory(ExperienceReplay):
         acting_player = init_obs_state.player_taking_action
         ending_index = starting_index + 1
         obs_state = ObservableGameState.from_array(obs[0, ending_index, :])
-        while not obs_state.is_done and obs_state.player_taking_action != acting_player:
+        while (not obs_state.is_done
+               and obs_state.player_taking_action != acting_player
+               and ending_index < len(obs[0]) - 1):
             ending_index += 1
             obs_state = ObservableGameState.from_array(obs[0, ending_index, :])
         return ending_index

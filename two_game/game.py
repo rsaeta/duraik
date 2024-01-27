@@ -328,6 +328,7 @@ def _step_stop_attacking(state: GameState) -> GameState:
         state.defender_has_taken
     ):  # Here the attacker has added all the cards they want and the defender takes
         new_state = _give_defender_cards(state)
+        new_state = _refill_player_hands(new_state)
         new_state = new_state._replace(defender_has_taken=False)
     elif state.num_undefended():
         new_state = state._replace(player_taking_action=state.defender)
