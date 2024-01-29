@@ -32,13 +32,15 @@ typedef struct GameState {
 typedef struct PlayerGameState {
   int player;
   int cardsInDeck;
-  vector<Card> hand;
-  vector<Card> attackTable;
-  vector<Card> defendTable;
-  vector<Card> graveyard;
+  vector<Card> *hand;
+  vector<Card> *attackTable;
+  vector<Card> *defendTable;
+  vector<Card> *graveyard;
+  Card *visibleCard;
   bool isDone;
   int playerTackingAction;
   bool defenderHasTaken;
+  bool attackerHasStopped;
   int defender;
   int cardsInOpponentHand;
 } PlayerGameState;
@@ -48,9 +50,10 @@ public:
     DurakGameC();
     void step(int action);
     void render();
-    GameState getGameState();
+    GameState *getGameState();
     vector<int> legalActions();
-    static PlayerGameState *getPlayerGameState(int player, GameState gameState);
+    static PlayerGameState *getPlayerGameState(int player, GameState *gameState);
+    static int reward(int player, GameState *gameState);
 private:
     deque<Card> deck;
     GameState gameState;

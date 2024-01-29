@@ -346,16 +346,56 @@ void DurakGameC::render() {
   cout << "Graveyard: ";
   Cards::printHand(&gameState.graveyard);
   cout << "Visible Card: " << gameState.visibleCard.to_string() << endl;
+  cout << "Defender has taken: " << gameState.defenderHasTaken << endl;
+  cout << "Attacker has stopped: " << gameState.attackerHasStopped << endl;
   cout << "Player Tacking Action: " << gameState.playerTackingAction << endl;
 }
 
-GameState DurakGameC::getGameState() {
-  return gameState;
+GameState *DurakGameC::getGameState() {
+  return &gameState;
 }
 
-PlayerGameState *DurakGameC::getPlayerGameState(int player, GameState gameState) {
-  // TODO
-  return new PlayerGameState();
+PlayerGameState *DurakGameC::getPlayerGameState(int player, GameState *gameState) {
+  /*
+  int player;
+  int cardsInDeck;
+  vector<Card> *hand;
+  vector<Card> *attackTable;
+  vector<Card> *defendTable;
+  vector<Card> *graveyard;
+  Card *visibleCard;
+  bool isDone;
+  int playerTackingAction;
+  bool defenderHasTaken;
+  bool attackerHasStopped;
+  int defender;
+  int cardsInOpponentHand;
+  */
+  PlayerGameState *pgs = new PlayerGameState();
+  pgs->player = player;
+  pgs->cardsInDeck = gameState->deck->size();
+  pgs->hand = player == 0 ? &gameState->player1Cards : &gameState->player2Cards;
+  pgs->attackTable = &gameState->attackTable;
+  pgs->defendTable = &gameState->defendTable;
+  pgs->graveyard = &gameState->graveyard;
+  pgs->visibleCard = &gameState->visibleCard;
+  pgs->isDone = gameState->isDone;
+  pgs->playerTackingAction = gameState->playerTackingAction;
+  pgs->defenderHasTaken = gameState->defenderHasTaken;
+  pgs->attackerHasStopped = gameState->attackerHasStopped;
+  pgs->defender = gameState->defender;
+  vector<Card> *oppHand = player == 0 ? &gameState->player2Cards : &gameState->player1Cards;
+  pgs->cardsInOpponentHand = oppHand->size();
+  return pgs;
+}
+
+int DurakGameC::reward(int player, GameState *gameState) {
+  if (!gameState->isDone) {
+    return 0;
+  }
+
+  vector<Card> *hand = player == 0 ? &gameState->player1Cards : &gameState->player2Cards;
+  return hand->size() == 0 ? 1 : -1;
 }
 
 };
