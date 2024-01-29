@@ -2,10 +2,10 @@
 #include <vector>
 #include <queue>
 
-namespace Dealer
+namespace Cards
 {
 
-enum class suit_t : unsigned char {
+enum suit_t {
   Clubs,
   Diamonds,
   Hearts,
@@ -24,20 +24,10 @@ public:
   bool operator==(const Card &a) const;
 };
 
-class Dealer {
-public:
-  Dealer();
-  void printHand(std::vector<Card> &hand);
-  std::deque<Card> makeDeck();
-  void printDeck();
-  void dealCards(int numCards, std::vector<Card> *hand);
-  void shuffleDeck();
-  std::deque<Card> getDeck() {
-    return deck;
-  }
-
-  private:
-  std::deque<Card> deck;
-};
+void printHand(std::vector<Card> *hand);
+void makeDeck(std::deque<Cards::Card> *inDeque);
+void printDeck(std::deque<Cards::Card> *deck);
+void dealCards(int numCards, std::deque<Card> *deck, std::vector<Card> *hand);
+void shuffleDeck(std::deque<Cards::Card> *deck);
 
 };

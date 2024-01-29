@@ -7,10 +7,10 @@
 
 #include "dealer.h"
 
-using namespace Dealer;
+using namespace Cards;
 using namespace std;
 
-auto suit_t_to_string(suit_t s) -> string {
+string suit_t_to_string(suit_t s) {
   switch (s) {
     case suit_t::Hearts: return "H";
     case suit_t::Diamonds: return "D";
@@ -20,31 +20,27 @@ auto suit_t_to_string(suit_t s) -> string {
   return NULL;
 }
 
-string Dealer::Card::to_string() {
+string Cards::Card::to_string() {
   string s = suit_t_to_string(suit);
   return s + std::to_string(rank);
 }
 
-bool Dealer::Card::operator<(const Card &b) const {
+bool Cards::Card::operator<(const Card &b) const {
   if (rank == b.rank) {
     return suit < b.suit;
   }
   return rank < b.rank;
 }
 
-bool Dealer::Card::operator==(const Card &b) const {
+bool Cards::Card::operator==(const Card &b) const {
   return rank == b.rank && suit == b.suit;
 }
 
-Dealer::Dealer::Dealer() {
-  deck = makeDeck();
-}
-
-void Dealer::Dealer::printDeck() {
+void Cards::printDeck(deque<Card> *deck) {
   cout << "[";
-  for (int i=0; i<deck.size(); i++) {
-    cout << deck[i].to_string();
-    if (deck[i].rank == 10) {
+  for (int i=0; i<deck->size(); i++) {
+    cout << (*deck)[i].to_string();
+    if ((*deck)[i].rank == 10) {
       cout << " ";
     } else {
       cout << "  ";
@@ -53,23 +49,23 @@ void Dealer::Dealer::printDeck() {
   cout << "]" << endl;
 }
 
-deque<Card> Dealer::Dealer::makeDeck() {
-  deque<Card> my_deck;
-  int lowestRank = 6;
-  for (int i=0; i<4; i++) {
-    for (int j=lowestRank; j<=14; j++) {
-      my_deck.push_back(Card((suit_t)i, j));
+void Cards::makeDeck(deque<Card> *inDeque)
+{
+    int lowestRank = 6;
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = lowestRank; j <= 14; j++)
+        {
+            inDeque->push_back(Card((suit_t)i, j));
+        }
     }
-  }
-  
-  return my_deck;
 }
 
-void Dealer::Dealer::printHand(vector<Card> &hand) {
+void Cards::printHand(vector<Card> *hand) {
   cout << "[";
-  for (int i=0; i<hand.size(); i++) {
-    cout << hand[i].to_string();
-    if (hand[i].rank == 10) {
+  for (int i=0; i<hand->size(); i++) {
+    cout << (*hand)[i].to_string();
+    if ((*hand)[i].rank == 10) {
       cout << " ";
     } else {
       cout << "  ";
@@ -78,13 +74,16 @@ void Dealer::Dealer::printHand(vector<Card> &hand) {
   cout << "]\n";
 }
 
-void Dealer::Dealer::shuffleDeck() {
-  random_shuffle(deck.begin(), deck.end());
+void Cards::shuffleDeck(deque<Card> *deck) {
+  std::random_device rd;
+  std::mt19937 g(rd());
+  shuffle(deck->begin(), deck->end(), g);
 }
 
-void Dealer::Dealer::dealCards(int numCards, vector<Card> *cards) {
+void Cards::dealCards(int numCards, deque<Card> *deck, vector<Card> *cards) {
+  numCards = deck->size() >= numCards ? numCards : deck->size();
   for (int i=0; i<numCards; i++) {
-    (*cards).push_back(deck.front());
-    deck.pop_front();
+    (*cards).push_back(deck->front());
+    deck->pop_front();
   }
 }

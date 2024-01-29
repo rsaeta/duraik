@@ -2,9 +2,9 @@
 #include <set>
 
 using namespace std;
-using namespace Dealer;
+using namespace Cards;
 
-namespace DurakGame {
+namespace durak_game {
 
 const int numActions();
 const int takeAction = 0;
@@ -15,7 +15,7 @@ Card cardFromAction(int action);
 string actionToString(int action);
 
 typedef struct GameState {
-  deque<Card> deck;
+  deque<Card> *deck;
   vector<Card> player1Cards;
   vector<Card> player2Cards;
   Card visibleCard;
@@ -43,16 +43,16 @@ typedef struct PlayerGameState {
   int cardsInOpponentHand;
 } PlayerGameState;
 
-class DurakGame {
+class DurakGameC {
 public:
-    DurakGame();
+    DurakGameC();
     void step(int action);
     void render();
     GameState getGameState();
     vector<int> legalActions();
-    static PlayerGameState getPlayerGameState(int player, GameState gameState);
+    static PlayerGameState *getPlayerGameState(int player, GameState gameState);
 private:
-    Dealer::Dealer dealer;
+    deque<Card> deck;
     GameState gameState;
     void handleAttack(int action);
     void handleDefend(int action);
@@ -68,6 +68,7 @@ private:
     void postAction();
     set<int> ranksInPlay();
     void addTableCardsToVector(vector<Card> *v);
+    bool isGameOver();
 };
 
 };

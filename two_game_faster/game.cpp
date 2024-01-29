@@ -6,9 +6,9 @@
 
 
 using namespace std;
-using namespace Dealer;
+using namespace Cards;
 
-namespace DurakGame {
+namespace durak_game {
 
 const int numCards = (15-6)*4;
 
@@ -56,9 +56,7 @@ bool isDefendAction(int action) {
 
 Card cardFromAction(int action) {
     action -= 2;
-    while (action > numCards) {
-        action -= numCards;
-    }
+    action = action % numCards;
 
     int suit = action/9;
     int rank = action%9 + 6;
@@ -79,23 +77,24 @@ std::string actionToString(int action) {
     }
 }
 
-DurakGame::DurakGame() {
-    dealer.shuffleDeck();
-    gameState.deck = dealer.getDeck();
-    dealer.dealCards(6, &gameState.player1Cards);
-    dealer.dealCards(6, &gameState.player2Cards);
-    gameState.visibleCard = gameState.deck.back();
-    gameState.attackTable = vector<Card>();
-    gameState.defendTable = vector<Card>();
-    gameState.graveyard = vector<Card>();
-    gameState.playerTackingAction = playerBeginAction(gameState.player1Cards, gameState.player2Cards, gameState.visibleCard.suit);
-    gameState.defender = otherPlayer(gameState.playerTackingAction);
-    gameState.defenderHasTaken = false;
-    gameState.attackerHasStopped = false;
-    gameState.isDone = false;
+DurakGameC::DurakGameC() {
+  Cards::makeDeck(&deck);
+  Cards::shuffleDeck(&deck);
+  gameState.deck = &deck;
+  Cards::dealCards(6, &deck, &gameState.player1Cards);
+  Cards::dealCards(6, &deck, &gameState.player2Cards);
+  gameState.visibleCard = gameState.deck->back();
+  gameState.attackTable = vector<Card>();
+  gameState.defendTable = vector<Card>();
+  gameState.graveyard = vector<Card>();
+  gameState.playerTackingAction = playerBeginAction(gameState.player1Cards, gameState.player2Cards, gameState.visibleCard.suit);
+  gameState.defender = otherPlayer(gameState.playerTackingAction);
+  gameState.defenderHasTaken = false;
+  gameState.attackerHasStopped = false;
+  gameState.isDone = false;
 }
 
-vector<int> DurakGame::legalDefenderActions() {
+vector<int> DurakGameC::legalDefenderActions() {
   int numDefend = gameState.defendTable.size();
   if (numDefend >= gameState.attackTable.size()) {
     cout << "Got more defenders than attackers" << endl;
@@ -105,8 +104,9 @@ vector<int> DurakGame::legalDefenderActions() {
   Card attackCard = gameState.attackTable[numDefend];
   vector<int> actions;
   actions.push_back(takeAction);
-  for (int i=0; i<gameState.playerTackingAction; i++) {
-    Card card = gameState.player2Cards[i];
+  vector<Card> *hand = defenderHand();
+  for (int i=0; i<hand->size(); i++) {
+    Card card = (*hand)[i];
     if (card.suit == attackCard.suit && card.rank > attackCard.rank) {
       actions.push_back(defendAction(card));
     } else if (card.suit == trumpSuit && attackCard.suit != trumpSuit) {
@@ -116,7 +116,7 @@ vector<int> DurakGame::legalDefenderActions() {
   return actions;
 }
 
-set<int> DurakGame::ranksInPlay() {
+set<int> DurakGameC::ranksInPlay() {
   set<int> ranks;
   for (int i=0; i<gameState.attackTable.size(); i++) {
     ranks.insert(gameState.attackTable[i].rank);
@@ -127,11 +127,11 @@ set<int> DurakGame::ranksInPlay() {
   return ranks;
 }
 
-vector<Card> DurakGame::currentPlayerHand() {
+vector<Card> DurakGameC::currentPlayerHand() {
   return gameState.playerTackingAction == 0 ? gameState.player1Cards : gameState.player2Cards;
 }
 
-vector<int> DurakGame::legalAttackerActions() {
+vector<int> DurakGameC::legalAttackerActions() {
   vector<int> actions;
 
   if (gameState.attackTable.empty()) {
@@ -159,14 +159,14 @@ vector<int> DurakGame::legalAttackerActions() {
   return actions;
 }
 
-vector<int> DurakGame::legalActions() {
+vector<int> DurakGameC::legalActions() {
   if (gameState.playerTackingAction == gameState.defender) {
     return legalDefenderActions();
   }
   return legalAttackerActions();
 }
 
-void DurakGame::removeCardFromHand(Card &card, int player) {
+void DurakGameC::removeCardFromHand(Card &card, int player) {
   vector<Card> *hand = player == 0 ? &gameState.player1Cards : &gameState.player2Cards;
   for (std::vector<Card>::iterator iter = hand->begin(); iter != hand->end(); ++iter) {
     if (*iter == card) {
@@ -176,14 +176,14 @@ void DurakGame::removeCardFromHand(Card &card, int player) {
   }
 }
 
-void DurakGame::handleAttack(int action) {
+void DurakGameC::handleAttack(int action) {
   Card card = cardFromAction(action);
   gameState.attackTable.push_back(card);
   // remove card from hand
   removeCardFromHand(card, gameState.playerTackingAction);
 }
 
-void DurakGame::handleDefend(int action) {
+void DurakGameC::handleDefend(int action) {
   Card card = cardFromAction(action);
   gameState.defendTable.push_back(card);
   removeCardFromHand(card, gameState.playerTackingAction);
@@ -195,12 +195,12 @@ void DurakGame::handleDefend(int action) {
       // Deal cards to attacker
       vector<Card> *attHand = attackerHand();
       int numCardsToDeal = 6 - attHand->size();
-      dealer.dealCards(numCardsToDeal, attHand);
+      Cards::dealCards(numCardsToDeal, &deck, attHand);
 
       // Deal cards to defender
       vector<Card> *defHand = defenderHand();
       numCardsToDeal = 6 - defHand->size();
-      dealer.dealCards(numCardsToDeal, defHand);
+      Cards::dealCards(numCardsToDeal, &deck, defHand);
 
       // Reset defenderHasTaken and attackerHasStopped
       gameState.defenderHasTaken = false;
@@ -217,7 +217,7 @@ void DurakGame::handleDefend(int action) {
   // else: player must defend again
 }
 
-void DurakGame::addTableCardsToVector(vector<Card> *v) {
+void DurakGameC::addTableCardsToVector(vector<Card> *v) {
   // Utility to add table cards to a vector (can be hand or graveyard)
   v->insert(v->end(), gameState.attackTable.begin(), gameState.attackTable.end());
   v->insert(v->end(), gameState.defendTable.begin(), gameState.defendTable.end());
@@ -227,7 +227,7 @@ void DurakGame::addTableCardsToVector(vector<Card> *v) {
   gameState.defendTable = vector<Card>();
 }
 
-void DurakGame::handleTake() {
+void DurakGameC::handleTake() {
   gameState.defenderHasTaken = true;
   // Check if attacker can add cards
   if (gameState.attackTable.size() - gameState.defendTable.size() < defenderHand()->size()) {
@@ -244,11 +244,11 @@ void DurakGame::handleTake() {
     // Deal cards to attacker
     vector<Card> *attHand = attackerHand();
     int numCardsToDeal = 6 - attHand->size();
-    dealer.dealCards(numCardsToDeal, attHand);
+    Cards::dealCards(numCardsToDeal, &deck, attHand);
   }
 }
 
-void DurakGame::handleStopAttack() {
+void DurakGameC::handleStopAttack() {
   gameState.attackerHasStopped = true;
   if (gameState.defenderHasTaken) { 
     // defender has taken, give cards in attackDeck and defendDeck to defender
@@ -262,7 +262,7 @@ void DurakGame::handleStopAttack() {
     // Deal cards to attacker
     vector<Card> *attHand = attackerHand();
     int numCardsToDeal = 6 - attHand->size();
-    dealer.dealCards(numCardsToDeal, attHand);
+    Cards::dealCards(numCardsToDeal, &deck, attHand);
 
   } else if (gameState.attackTable.size() == gameState.defendTable.size()) { 
     // Successful defense, give cards in attackDeck and defendDeck to graveyard
@@ -275,12 +275,12 @@ void DurakGame::handleStopAttack() {
     // Deal cards to attacker
     vector<Card> *attHand = attackerHand();
     int numCardsToDeal = 6 - attHand->size();
-    dealer.dealCards(numCardsToDeal, attHand);
+    dealCards(numCardsToDeal, &deck, attHand);
 
     // Deal cards to defender
     vector<Card> *defHand = defenderHand();
     numCardsToDeal = 6 - defHand->size();
-    dealer.dealCards(numCardsToDeal, defHand);
+    Cards::dealCards(numCardsToDeal, &deck, defHand);
 
     // Swap attacker/defender
     gameState.playerTackingAction = otherPlayer(gameState.playerTackingAction);
@@ -291,19 +291,19 @@ void DurakGame::handleStopAttack() {
   }
 }
 
-bool DurakGame::isRoundOver() {
+bool DurakGameC::isRoundOver() {
   return gameState.defenderHasTaken || gameState.attackerHasStopped || (gameState.attackTable.size() == 6 && gameState.defendTable.size() == 6);
 }
 
-vector<Card> *DurakGame::attackerHand() {
+vector<Card> *DurakGameC::attackerHand() {
     return gameState.defender == 0 ? &gameState.player2Cards : &gameState.player1Cards;
 }
 
-vector<Card> *DurakGame::defenderHand() {
+vector<Card> *DurakGameC::defenderHand() {
     return gameState.defender == 0 ? &gameState.player1Cards : &gameState.player2Cards;
 }
 
-void DurakGame::postAction()
+void DurakGameC::postAction()
 {
     if (isRoundOver())
     {
@@ -311,7 +311,7 @@ void DurakGame::postAction()
     }
 }
 
-void DurakGame::step(int action) {
+void DurakGameC::step(int action) {
   if (isTakeAction(action)) {
     handleTake();
   } else if (isStopAttackAction(action)) {
@@ -323,33 +323,39 @@ void DurakGame::step(int action) {
   } else {
     cout << "Invalid action: " << action << endl;
   }
+  gameState.isDone = isGameOver();
 }
 
-void DurakGame::render() {
+bool DurakGameC::isGameOver() {
+  return gameState.deck->size() == 0 && 
+    (gameState.player1Cards.size() == 0 || gameState.player2Cards.size() == 0);
+}
+
+void DurakGameC::render() {
   // Prints out the gameState in a nice way
   cout << "Deck: ";
-  dealer.printDeck();
+  Cards::printDeck(&deck);
   cout << "Player 1 Hand: ";
-  dealer.printHand(gameState.player1Cards);
+  Cards::printHand(&gameState.player1Cards);
   cout << "Player 2 Hand: ";
-  dealer.printHand(gameState.player2Cards);
+  Cards::printHand(&gameState.player2Cards);
   cout << "Attack Table: ";
-  dealer.printHand(gameState.attackTable);
+  Cards::printHand(&gameState.attackTable);
   cout << "Defend Table: ";
-  dealer.printHand(gameState.defendTable);
+  Cards::printHand(&gameState.defendTable);
   cout << "Graveyard: ";
-  dealer.printHand(gameState.graveyard);
+  Cards::printHand(&gameState.graveyard);
   cout << "Visible Card: " << gameState.visibleCard.to_string() << endl;
   cout << "Player Tacking Action: " << gameState.playerTackingAction << endl;
 }
 
-GameState DurakGame::getGameState() {
+GameState DurakGameC::getGameState() {
   return gameState;
 }
 
-PlayerGameState DurakGame::getPlayerGameState(int player, GameState gameState) {
+PlayerGameState *DurakGameC::getPlayerGameState(int player, GameState gameState) {
   // TODO
-  return PlayerGameState();
+  return new PlayerGameState();
 }
 
 };
