@@ -1,3 +1,4 @@
+#pragma once
 #include "dealer.h"
 #include <set>
 
@@ -6,16 +7,25 @@ using namespace Cards;
 
 namespace durak_game {
 
+// number of actions in the game total
 const int numActions();
+// identifier to take action
 const int takeAction = 0;
+// identifier to stop attack action
 const int stopAttackAction = 1;
+// get the action number of attacking with a card
 int attackAction(Card &card);
+// get the action number of defending with a card
 int defendAction(Card &card);
+// get the card from an action number
 Card cardFromAction(int action);
+// get a string representation of an action number
 string actionToString(int action);
 
+// Holds the entire state of the game (private to the game)
 typedef struct GameState {
-  deque<Card> *deck;
+  // deck of cards
+  deque<Card> deck;
   vector<Card> player1Cards;
   vector<Card> player2Cards;
   Card visibleCard;
@@ -46,32 +56,36 @@ typedef struct PlayerGameState {
 } PlayerGameState;
 
 class DurakGameC {
-public:
-    DurakGameC();
-    void step(int action);
-    void render();
-    GameState *getGameState();
-    vector<int> legalActions();
-    static PlayerGameState *getPlayerGameState(int player, GameState *gameState);
-    static int reward(int player, GameState *gameState);
-private:
-    deque<Card> deck;
-    GameState gameState;
-    void handleAttack(int action);
-    void handleDefend(int action);
-    void handleTake();
-    void handleStopAttack();
-    bool isRoundOver();
-    vector<int> legalDefenderActions();
-    vector<int> legalAttackerActions();
-    void removeCardFromHand(Card &card, int player);
-    vector<Card> currentPlayerHand();
-    vector<Card> *attackerHand();
-    vector<Card> *defenderHand();
-    void postAction();
-    set<int> ranksInPlay();
-    void addTableCardsToVector(vector<Card> *v);
-    bool isGameOver();
+  public:
+  DurakGameC();
+  void step(int action);
+  void render();
+  GameState *getGameState();
+  vector<int> legalActions();
+  static PlayerGameState *getPlayerGameState(int player, GameState *gameState);
+  static int reward(int player, GameState *gameState);
+  
+  private:
+  // Holds all data about the game
+  GameState gameState;
+
+  void handleAttack(int action);
+  void handleDefend(int action);
+  void handleTake();
+  void handleStopAttack();
+  bool isRoundOver();
+
+  vector<int> legalDefenderActions();
+  vector<int> legalAttackerActions();
+
+  void removeCardFromHand(Card *card, int player);
+  vector<Card> *currentPlayerHand();
+  vector<Card> *attackerHand();
+  vector<Card> *defenderHand();
+ 
+  void ranksInPlay(set<int> *outSet);
+  void addTableCardsToVector(vector<Card> *v);
+  bool isGameOver();
 };
 
 };

@@ -78,12 +78,11 @@ std::string actionToString(int action) {
 }
 
 DurakGameC::DurakGameC() {
-  Cards::makeDeck(&deck);
-  Cards::shuffleDeck(&deck);
-  gameState.deck = &deck;
-  Cards::dealCards(6, &deck, &gameState.player1Cards);
-  Cards::dealCards(6, &deck, &gameState.player2Cards);
-  gameState.visibleCard = gameState.deck->back();
+  Cards::makeDeck(&gameState.deck);
+  Cards::shuffleDeck(&gameState.deck);
+  Cards::dealCards(6, &gameState.deck, &gameState.player1Cards);
+  Cards::dealCards(6, &gameState.deck, &gameState.player2Cards);
+  gameState.visibleCard = gameState.deck.back();
   gameState.attackTable = vector<Card>();
   gameState.defendTable = vector<Card>();
   gameState.graveyard = vector<Card>();
@@ -116,19 +115,19 @@ vector<int> DurakGameC::legalDefenderActions() {
   return actions;
 }
 
-set<int> DurakGameC::ranksInPlay() {
-  set<int> ranks;
+void DurakGameC::ranksInPlay(set<int> *ranks) {
   for (int i=0; i<gameState.attackTable.size(); i++) {
-    ranks.insert(gameState.attackTable[i].rank);
+    ranks->insert(gameState.attackTable[i].rank);
   }
   for (int i=0; i<gameState.defendTable.size(); i++) {
-    ranks.insert(gameState.defendTable[i].rank);
+    ranks->insert(gameState.defendTable[i].rank);
   }
-  return ranks;
 }
 
-vector<Card> DurakGameC::currentPlayerHand() {
-  return gameState.playerTackingAction == 0 ? gameState.player1Cards : gameState.player2Cards;
+vector<Card> *DurakGameC::currentPlayerHand() {
+  return gameState.playerTackingAction == 0 
+      ? &gameState.player1Cards
+      : &gameState.player2Cards;
 }
 
 vector<int> DurakGameC::legalAttackerActions() {
@@ -136,9 +135,9 @@ vector<int> DurakGameC::legalAttackerActions() {
 
   if (gameState.attackTable.empty()) {
     cout << "Attacker has not attacked yet" << endl;
-    vector<Card> hand = currentPlayerHand();
-    for (int i=0; i<hand.size(); i++) {
-      actions.push_back(attackAction(hand[i]));
+    vector<Card> *hand = currentPlayerHand();
+    for (int i=0; i<hand->size(); i++) {
+      actions.push_back(attackAction(hand->at(i)));
     }
     return actions;
   }
@@ -149,8 +148,9 @@ vector<int> DurakGameC::legalAttackerActions() {
     return actions;
   }
 
-  set<int> ranks = ranksInPlay();
-  for (Card card : currentPlayerHand()) {
+  set<int> ranks;
+  ranksInPlay(&ranks);
+  for (Card card : *currentPlayerHand()) {
     if (ranks.find(card.rank) != ranks.end()) {  // if rank of card is in play, can attack with it
       actions.push_back(attackAction(card));
     }
@@ -166,10 +166,10 @@ vector<int> DurakGameC::legalActions() {
   return legalAttackerActions();
 }
 
-void DurakGameC::removeCardFromHand(Card &card, int player) {
+void DurakGameC::removeCardFromHand(Card *card, int player) {
   vector<Card> *hand = player == 0 ? &gameState.player1Cards : &gameState.player2Cards;
   for (std::vector<Card>::iterator iter = hand->begin(); iter != hand->end(); ++iter) {
-    if (*iter == card) {
+    if (*iter == *card) {
       hand->erase(iter);
       break;
     }
@@ -180,13 +180,13 @@ void DurakGameC::handleAttack(int action) {
   Card card = cardFromAction(action);
   gameState.attackTable.push_back(card);
   // remove card from hand
-  removeCardFromHand(card, gameState.playerTackingAction);
+  removeCardFromHand(&card, gameState.playerTackingAction);
 }
 
 void DurakGameC::handleDefend(int action) {
   Card card = cardFromAction(action);
   gameState.defendTable.push_back(card);
-  removeCardFromHand(card, gameState.playerTackingAction);
+  removeCardFromHand(&card, gameState.playerTackingAction);
   if (gameState.attackTable.size() == gameState.defendTable.size()) {
     if (gameState.attackTable.size() == 6 || defenderHand()->size() == 0) {  
       // Reached max, successful defense give cards to graveyard
@@ -195,20 +195,20 @@ void DurakGameC::handleDefend(int action) {
       // Deal cards to attacker
       vector<Card> *attHand = attackerHand();
       int numCardsToDeal = 6 - attHand->size();
-      Cards::dealCards(numCardsToDeal, &deck, attHand);
+      Cards::dealCards(numCardsToDeal, &gameState.deck, attHand);
 
       // Deal cards to defender
       vector<Card> *defHand = defenderHand();
       numCardsToDeal = 6 - defHand->size();
-      Cards::dealCards(numCardsToDeal, &deck, defHand);
+      Cards::dealCards(numCardsToDeal, &gameState.deck, defHand);
 
       // Reset defenderHasTaken and attackerHasStopped
       gameState.defenderHasTaken = false;
       gameState.attackerHasStopped = false;
 
       // Swap attacker/defender
-      gameState.playerTackingAction = otherPlayer(gameState.playerTackingAction);
       gameState.defender = otherPlayer(gameState.defender);
+      gameState.playerTackingAction = otherPlayer(gameState.defender);
     } else {
       // Player can attack again
       gameState.playerTackingAction = otherPlayer(gameState.playerTackingAction);  
@@ -241,10 +241,13 @@ void DurakGameC::handleTake() {
     gameState.defenderHasTaken = false;
     gameState.attackerHasStopped = false;
 
+    // Make sure next to act is still the same attacker as before
+    gameState.playerTackingAction = otherPlayer(gameState.defender);
+
     // Deal cards to attacker
     vector<Card> *attHand = attackerHand();
     int numCardsToDeal = 6 - attHand->size();
-    Cards::dealCards(numCardsToDeal, &deck, attHand);
+    Cards::dealCards(numCardsToDeal, &gameState.deck, attHand);
   }
 }
 
@@ -262,7 +265,7 @@ void DurakGameC::handleStopAttack() {
     // Deal cards to attacker
     vector<Card> *attHand = attackerHand();
     int numCardsToDeal = 6 - attHand->size();
-    Cards::dealCards(numCardsToDeal, &deck, attHand);
+    Cards::dealCards(numCardsToDeal, &gameState.deck, attHand);
 
   } else if (gameState.attackTable.size() == gameState.defendTable.size()) { 
     // Successful defense, give cards in attackDeck and defendDeck to graveyard
@@ -275,12 +278,12 @@ void DurakGameC::handleStopAttack() {
     // Deal cards to attacker
     vector<Card> *attHand = attackerHand();
     int numCardsToDeal = 6 - attHand->size();
-    dealCards(numCardsToDeal, &deck, attHand);
+    dealCards(numCardsToDeal, &gameState.deck, attHand);
 
     // Deal cards to defender
     vector<Card> *defHand = defenderHand();
     numCardsToDeal = 6 - defHand->size();
-    Cards::dealCards(numCardsToDeal, &deck, defHand);
+    Cards::dealCards(numCardsToDeal, &gameState.deck, defHand);
 
     // Swap attacker/defender
     gameState.playerTackingAction = otherPlayer(gameState.playerTackingAction);
@@ -303,14 +306,6 @@ vector<Card> *DurakGameC::defenderHand() {
     return gameState.defender == 0 ? &gameState.player1Cards : &gameState.player2Cards;
 }
 
-void DurakGameC::postAction()
-{
-    if (isRoundOver())
-    {
-        cout << "Round is over" << endl;
-    }
-}
-
 void DurakGameC::step(int action) {
   if (isTakeAction(action)) {
     handleTake();
@@ -327,14 +322,14 @@ void DurakGameC::step(int action) {
 }
 
 bool DurakGameC::isGameOver() {
-  return gameState.deck->size() == 0 && 
+  return gameState.deck.size() == 0 && 
     (gameState.player1Cards.size() == 0 || gameState.player2Cards.size() == 0);
 }
 
 void DurakGameC::render() {
   // Prints out the gameState in a nice way
   cout << "Deck: ";
-  Cards::printDeck(&deck);
+  Cards::printDeck(&gameState.deck);
   cout << "Player 1 Hand: ";
   Cards::printHand(&gameState.player1Cards);
   cout << "Player 2 Hand: ";
@@ -356,24 +351,9 @@ GameState *DurakGameC::getGameState() {
 }
 
 PlayerGameState *DurakGameC::getPlayerGameState(int player, GameState *gameState) {
-  /*
-  int player;
-  int cardsInDeck;
-  vector<Card> *hand;
-  vector<Card> *attackTable;
-  vector<Card> *defendTable;
-  vector<Card> *graveyard;
-  Card *visibleCard;
-  bool isDone;
-  int playerTackingAction;
-  bool defenderHasTaken;
-  bool attackerHasStopped;
-  int defender;
-  int cardsInOpponentHand;
-  */
   PlayerGameState *pgs = new PlayerGameState();
   pgs->player = player;
-  pgs->cardsInDeck = gameState->deck->size();
+  pgs->cardsInDeck = gameState->deck.size();
   pgs->hand = player == 0 ? &gameState->player1Cards : &gameState->player2Cards;
   pgs->attackTable = &gameState->attackTable;
   pgs->defendTable = &gameState->defendTable;

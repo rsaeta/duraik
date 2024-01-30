@@ -39,7 +39,7 @@ int HumanPlayer::chooseAction(durak_game::PlayerGameState *state, vector<int> *l
     cin >> res;
   }
 
-  return res;
+  return legalActions->at(res);
 }
 
 
