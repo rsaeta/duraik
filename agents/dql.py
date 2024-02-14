@@ -3,7 +3,7 @@ from numpy import ndarray
 from torch import nn
 from typing import Collection, Tuple
 import numpy as np
-from game import DurakAction, ObservableDurakGameState, GameTransition
+from three_game import DurakAction, ObservableDurakGameState, GameTransition
 from .easy_agents import DurakPlayer
 
 
@@ -139,7 +139,7 @@ class ExperienceReplay:
 
 class DQAgent(nn.Module, DurakPlayer):
     """
-    The actual agent using experience replay and a deep q network to learn how to play any game (?).
+    The actual agent using experience replay and a deep q network to learn how to play any three_game (?).
     """
 
     def __init__(
@@ -147,7 +147,6 @@ class DQAgent(nn.Module, DurakPlayer):
             input_dim,
             n_actions,
             player_id,
-            hand,
             hidden_dims=None,
             memory_size=100000,
             batch_size=32,
@@ -155,7 +154,7 @@ class DQAgent(nn.Module, DurakPlayer):
             eps=0.1,
             device=None):
         nn.Module.__init__(self)
-        DurakPlayer.__init__(self, player_id, hand=hand)
+        DurakPlayer.__init__(self, player_id)
         self.dqn = DQN(input_dim, n_actions, hidden_dims)
         self.batch_size = batch_size
 
@@ -197,7 +196,8 @@ class DQAgent(nn.Module, DurakPlayer):
                 ))
                 self.prev_state = transition.state
 
-    def choose_action(self, state, legal_actions):
+    def choose_action(self, info_state, legal_actions):
+        state = info_state[-1]
         if not self.training or np.random.random() > self.eps:
             state_array = state_to_input_array(state)
             state_tensor = torch.from_numpy(state_array).float().to(self.device)
