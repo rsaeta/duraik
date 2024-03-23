@@ -36,9 +36,15 @@ impl fmt::Debug for Card {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Deck {
     cards: Vec<Card>,
+}
+
+impl fmt::Debug for Deck {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.cards)
+    }
 }
 
 impl Deck {
@@ -75,13 +81,18 @@ impl Deck {
         drawn
     }
 
-    fn get_last(&self) -> Option<Card> {
-        self.cards.last().cloned()
+    fn get_first(&self) -> Option<Card> {
+        self.cards.first().cloned()
     }
 }
 
 trait Player {
-    fn choose_action(&mut self, game_state: ObservableGameState, actions: Vec<Action>) -> Action;
+    fn choose_action(
+        &mut self,
+        game_state: ObservableGameState,
+        actions: Vec<Action>,
+        history: Vec<ObservableGameState>,
+    ) -> Action;
 }
 
 struct RandomPlayer {
@@ -100,8 +111,17 @@ impl RandomPlayer {
 }
 
 impl Player for RandomPlayer {
-    fn choose_action(&mut self, _state: ObservableGameState, actions: Vec<Action>) -> Action {
-        let choice = self.rng.gen_range(0..actions.len());
+    fn choose_action(
+        &mut self,
+        _state: ObservableGameState,
+        actions: Vec<Action>,
+        _history: Vec<ObservableGameState>,
+    ) -> Action {
+        let choice = match actions.len() {
+            0 => panic!("No actions available"),
+            1 => 0,
+            _ => self.rng.gen_range(0..actions.len()),
+        };
         actions[choice]
     }
 }
@@ -129,14 +149,15 @@ struct GameState {
     defending_player: GamePlayer,
     visible_card: Card,
     defender_has_taken: bool,
+    graveyard: Vec<Card>,
 }
 
 impl fmt::Debug for GameState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{{\n\tDeck: {:?}\n\tAttack: {:?}\n\tDefense: {:?}\n\tHand1: {:?}\n\tHand2: {:?}\n\tActing: {:?}\n\tDefending: {:?}\n\tVisible: {:?}\n\tDefender has taken: {}\n}}",
-            self.deck.cards.len(),
+            "{{\n\tDeck: {:?}\n\tAttack: {:?}\n\tDefense: {:?}\n\tHand1: {:?}\n\tHand2: {:?}\n\tActing: {:?}\n\tDefending: {:?}\n\tVisible: {:?}\n\tDefender has taken: {}\n\tGraveyard: {:?}\n}}",
+            self.deck,
             self.attack_table,
             self.defense_table,
             self.hand1,
@@ -144,7 +165,8 @@ impl fmt::Debug for GameState {
             self.acting_player,
             self.defending_player,
             self.visible_card,
-            self.defender_has_taken
+            self.defender_has_taken,
+            self.graveyard,
         )
     }
 }
@@ -164,6 +186,8 @@ impl GamePlayer {
     }
 }
 
+// ignore unused variable for now
+#[allow(dead_code)]
 struct ObservableGameState {
     player: GamePlayer,
     num_cards_in_deck: u8,
@@ -217,6 +241,7 @@ impl GameState {
 }
 
 struct Game {
+    history: Vec<GameState>,
     game_state: GameState,
     player1: Box<dyn Player>,
     player2: Box<dyn Player>,
@@ -248,7 +273,7 @@ impl Game {
         deck.shuffle();
         let hand1 = Hand(deck.draw_n(6));
         let hand2 = Hand(deck.draw_n(6));
-        let visible_card = deck.get_last().unwrap();
+        let visible_card = deck.get_first().unwrap();
         let first_attacker = det_first_attacker(&hand1, &hand2, visible_card.suit);
         let game_state = GameState {
             deck,
@@ -260,19 +285,14 @@ impl Game {
             defending_player: first_attacker.other(),
             visible_card,
             defender_has_taken: false,
+            graveyard: Vec::new(),
         };
 
         Game {
             game_state,
-            player1: player1,
-            player2: player2,
-        }
-    }
-
-    fn _defender_hand(&mut self) -> &mut Hand {
-        match self.game_state.defending_player {
-            GamePlayer::Player1 => &mut self.game_state.hand1,
-            GamePlayer::Player2 => &mut self.game_state.hand2,
+            player1,
+            player2,
+            history: Vec::new(),
         }
     }
 
@@ -297,85 +317,115 @@ impl Game {
         }
     }
 
-    fn num_undefended(&self, game_state: &GameState) -> u8 {
-        let num_attack = game_state.attack_table.len() as u8;
-        let num_defend = game_state.defense_table.len() as u8;
+    fn num_undefended(&self) -> u8 {
+        let num_attack = self.game_state.attack_table.len() as u8;
+        let num_defend = self.game_state.defense_table.len() as u8;
         num_attack - num_defend
     }
 
-    fn refill_hands(&self, game_state: &mut GameState) {
-        let refill_order = match game_state.defending_player {
+    fn refill_hands(&mut self) {
+        let refill_order = match self.game_state.defending_player {
             GamePlayer::Player2 => vec![GamePlayer::Player1, GamePlayer::Player2],
             GamePlayer::Player1 => vec![GamePlayer::Player2, GamePlayer::Player1],
         };
         for player in refill_order.iter() {
             let hand = match player {
-                GamePlayer::Player1 => &mut game_state.hand1,
-                GamePlayer::Player2 => &mut game_state.hand2,
+                GamePlayer::Player1 => &mut self.game_state.hand1,
+                GamePlayer::Player2 => &mut self.game_state.hand2,
             };
-            let num_cards = 6 - hand.0.len() as u8;
-            let mut new_cards = game_state.deck.draw_n(num_cards);
-            hand.0.append(&mut new_cards);
+            let num_cards = 6 - hand.0.len() as i8;
+            if num_cards > 0 {
+                let mut new_cards = self.game_state.deck.draw_n(num_cards as u8);
+                hand.0.append(&mut new_cards);
+            }
         }
     }
 
     fn add_table_to_defender(&mut self) {
-        let mut dt = self.game_state.defense_table.clone();
-        let mut at = self.game_state.attack_table.clone();
-        let hand = self._defender_hand();
-        hand.0.append(&mut dt);
-        hand.0.append(&mut at);
+        // Temporarily take mutable references to the tables you want to modify.
+        let defense_table = &mut self.game_state.defense_table;
+        let attack_table = &mut self.game_state.attack_table;
+
+        // Borrow `self` mutably once to get a mutable reference to the defender's hand.
+        let hand = match self.game_state.defending_player {
+            GamePlayer::Player1 => &mut self.game_state.hand1.0,
+            GamePlayer::Player2 => &mut self.game_state.hand2.0,
+        };
+
+        // Now, you can append the tables to the hand without violating Rust's borrowing rules,
+        // because `hand`, `defense_table`, and `attack_table` are clearly separate mutable references.
+        hand.append(defense_table);
+        hand.append(attack_table);
+    }
+
+    fn clear_table(&mut self) {
+        self.game_state
+            .graveyard
+            .extend(self.game_state.attack_table.iter());
+        self.game_state
+            .graveyard
+            .extend(self.game_state.defense_table.iter());
         self.game_state.attack_table.clear();
         self.game_state.defense_table.clear();
     }
 
-    fn handle_take(&mut self) -> GameState {
-        let mut new_state = self.game_state.clone();
+    fn handle_take(&mut self) {
         // check whether attacker can add more cards
-        let num_attack = new_state.attack_table.len() as u8;
-        let num_defend = new_state.defense_table.len() as u8;
+        let num_attack = self.game_state.attack_table.len() as u8;
+        let num_defend = self.game_state.defense_table.len() as u8;
         if num_attack == 6 || (num_attack - num_defend) >= self.defender_hand().0.len() as u8 {
             // here we need to give defender all cards, round is over
             self.add_table_to_defender();
-            self.refill_hands(&mut new_state);
+            self.refill_hands();
+            self.game_state.acting_player = self.game_state.acting_player.other();
         } else {
             // just need to give controller back to attacker after setting flag
-            new_state.defender_has_taken = true;
-            new_state.acting_player = new_state.acting_player.other();
+            self.game_state.defender_has_taken = true;
+            self.game_state.acting_player = self.game_state.acting_player.other();
         }
-        new_state
     }
 
-    fn handle_stop_attack(&mut self) -> GameState {
-        let mut new_state: GameState = self.game_state.clone();
+    fn handle_stop_attack(&mut self) {
         if self.game_state.defender_has_taken {
             self.add_table_to_defender();
-            self.refill_hands(&mut new_state);
+            self.refill_hands();
         } else {
-            new_state.acting_player = new_state.acting_player.other();
+            if self.game_state.num_undefended() == 0 {
+                self.clear_table();
+                self.game_state.defending_player = self.game_state.defending_player.other();
+                self.refill_hands();
+            }
+            self.game_state.acting_player = self.game_state.acting_player.other();
         }
-
-        new_state
+        self.game_state.defender_has_taken = false;
     }
 
-    fn handle_attack(&mut self, card: Card) -> GameState {
-        let mut new_state = self.game_state.clone();
-        new_state.attack_table.push(card);
+    fn handle_attack(&mut self, card: Card) {
+        self.game_state.attack_table.push(card);
         // remove card from player hand
-        let hand = match new_state.acting_player {
-            GamePlayer::Player1 => &mut new_state.hand1,
-            GamePlayer::Player2 => &mut new_state.hand2,
-        };
+        let hand = self._attacker_hand();
         let index = hand.0.iter().position(|x| *x == card).unwrap();
         hand.0.remove(index);
-        new_state
     }
 
-    fn handle_defense(&self, card: Card) -> GameState {
-        let mut new_state = self.game_state.clone();
-        new_state.defense_table.push(card);
-        if new_state.num_undefended() == 0 {}
-        new_state
+    fn handle_defense(&mut self, card: Card) {
+        self.game_state.defense_table.push(card);
+        {
+            let hand = match self.game_state.defending_player {
+                GamePlayer::Player1 => &mut self.game_state.hand1,
+                GamePlayer::Player2 => &mut self.game_state.hand2,
+            };
+            let index = hand.0.iter().position(|x| *x == card).unwrap();
+            hand.0.remove(index);
+        }
+        if self.game_state.defense_table.len() == 6 || self.defender_hand().0.len() == 0 {
+            self.clear_table();
+            self.refill_hands();
+            self.game_state.defender_has_taken = false;
+            self.game_state.defending_player = self.game_state.defending_player.other();
+        } else if self.game_state.num_undefended() == 0 {
+            self.game_state.acting_player = self.game_state.acting_player.other();
+        }
     }
 
     fn ranks(&self, game_state: &GameState) -> HashSet<u8> {
@@ -411,8 +461,7 @@ impl Game {
     fn legal_defenses(&self) -> Vec<Action> {
         let mut actions = Vec::new();
         actions.push(Action::Take);
-        let last_attack =
-            self.game_state.attack_table[self.num_undefended(&self.game_state) as usize];
+        let last_attack = self.game_state.attack_table[(self.num_undefended() as usize) - 1];
         let tsuit = self.game_state.visible_card.suit;
         for card in self.defender_hand().0.iter() {
             if last_attack.suit == tsuit {
@@ -436,7 +485,7 @@ impl Game {
             self.game_state.acting_player,
             self.game_state.defending_player,
         ) {
-            (A, B) if A == B => self.legal_defenses(),
+            (a, b) if a == b => self.legal_defenses(),
             _ => self.legal_attacks(),
         }
     }
@@ -451,32 +500,36 @@ enum Action {
 }
 
 trait GameLogic {
-    fn step(&mut self, game_state: &GameState, action: Action) -> GameState;
-    fn get_actions(&self, game_state: &GameState) -> Vec<Action>;
-    fn get_winner(&self, game_state: GameState) -> Option<GamePlayer>;
-    fn get_rewards(&self, game_state: GameState) -> (f32, f32);
-    fn is_over(&self, game_state: &GameState) -> bool;
+    fn step(&mut self, action: Action) -> &GameState;
+    fn get_actions(&self) -> Vec<Action>;
+    fn get_winner(&self) -> Option<GamePlayer>;
+    fn get_rewards(&self) -> (f32, f32);
+    fn is_over(&self) -> bool;
 }
 
 impl GameLogic for Game {
-    fn step(&mut self, game_state: &GameState, action: Action) -> GameState {
+    fn step(&mut self, action: Action) -> &GameState {
+        let current_state = self.game_state.clone();
+        self.history.push(current_state);
         match action {
             Action::StopAttack => self.handle_stop_attack(),
             Action::Take => self.handle_take(),
             Action::Attack(card) => self.handle_attack(card),
             Action::Defend(card) => self.handle_defense(card),
         }
+
+        &self.game_state
     }
 
-    fn get_actions(&self, game_state: &GameState) -> Vec<Action> {
+    fn get_actions(&self) -> Vec<Action> {
         self.legal_actions()
     }
 
-    fn get_winner(&self, game_state: GameState) -> Option<GamePlayer> {
+    fn get_winner(&self) -> Option<GamePlayer> {
         let sizes = vec![
-            game_state.hand1.0,
-            game_state.hand2.0,
-            game_state.deck.cards,
+            &self.game_state.hand1.0,
+            &self.game_state.hand2.0,
+            &self.game_state.deck.cards,
         ]
         .iter()
         .map(|x| x.len())
@@ -490,8 +543,8 @@ impl GameLogic for Game {
         }
     }
 
-    fn get_rewards(&self, game_state: GameState) -> (f32, f32) {
-        let winner = self.get_winner(game_state);
+    fn get_rewards(&self) -> (f32, f32) {
+        let winner = self.get_winner();
         match winner {
             Some(GamePlayer::Player1) => (1.0, -1.0),
             Some(GamePlayer::Player2) => (-1.0, 1.0),
@@ -499,11 +552,11 @@ impl GameLogic for Game {
         }
     }
 
-    fn is_over(&self, game_state: &GameState) -> bool {
+    fn is_over(&self) -> bool {
         let sizes = vec![
-            &game_state.hand1.0,
-            &game_state.hand2.0,
-            &game_state.deck.cards,
+            &self.game_state.hand1.0,
+            &self.game_state.hand2.0,
+            &self.game_state.deck.cards,
         ]
         .iter()
         .map(|x| x.len())
@@ -518,37 +571,44 @@ impl GameLogic for Game {
     }
 }
 
-fn run_game() {
+fn run_game() -> (f32, f32) {
     let p1 = Box::new(RandomPlayer::new(None));
     let p2 = Box::new(RandomPlayer::new(None));
     let mut game = Game::new(p1, p2);
     let mut game_over = false;
-    let mut game_state = game.game_state.clone();
-    let mut i = 0;
     'game_loop: loop {
-        i += 1;
         // print i
-        println!("i: {}", i);
+        // println!("i: {}", i);
         if game_over {
             break 'game_loop;
         }
-        game.game_state = game_state;
         let pta = game.game_state.acting_player;
-        let actions = game.get_actions(&game.game_state);
+        let actions = game.get_actions();
         let player = match pta {
             GamePlayer::Player1 => game.player1.as_mut(),
             GamePlayer::Player2 => game.player2.as_mut(),
         };
-        println!("Player: {:?}", pta);
-        println!("Actions: {:?}", actions);
-        let action = player.choose_action(game.game_state.observe(pta), actions);
-        println!("Action: {:?}", action);
-        game_state = game.step(&game.game_state, action);
-        println!("Gamestate: {:?}", game_state);
-        game_over = game.is_over(&game_state);
+        let history = game.history.iter().map(|x| x.observe(pta)).collect();
+        //println!("Player: {:?}", pta);
+        //println!("Actions: {:?}", actions);
+        let action = player.choose_action(game.game_state.observe(pta), actions, history);
+        //println!("Action: {:?}", action);
+        game.step(action);
+        //println!("Gamestate: {:?}", *game_state);
+        game_over = game.is_over();
     }
+    let rewards = game.get_rewards();
+    // println!("Rewards: {:?}", rewards);
+    rewards
 }
 
 fn main() {
-    run_game();
+    use rayon::prelude::*;
+    let num_games = 100000;
+    let range = 0..num_games;
+    let results = range
+        .into_par_iter()
+        .map(|_| run_game())
+        .reduce(|| (0., 0.), |(p1, p2), (_p1, _p2)| (p1 + _p1, p2 + _p2));
+    println!("Results: {:?}", results);
 }
