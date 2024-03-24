@@ -500,7 +500,7 @@ enum Action {
 }
 
 trait GameLogic {
-    fn step(&mut self, action: Action) -> &GameState;
+    fn step(&mut self, action: Action) -> Result<(), &str>;
     fn get_actions(&self) -> Vec<Action>;
     fn get_winner(&self) -> Option<GamePlayer>;
     fn get_rewards(&self) -> (f32, f32);
@@ -508,9 +508,13 @@ trait GameLogic {
 }
 
 impl GameLogic for Game {
-    fn step(&mut self, action: Action) -> &GameState {
+    fn step(&mut self, action: Action) -> Result<(), &str> {
         let current_state = self.game_state.clone();
         self.history.push(current_state);
+        let legal_actions = self.legal_actions();
+        if !legal_actions.contains(&action) {
+            return Err("Illegal action");
+        }
         match action {
             Action::StopAttack => self.handle_stop_attack(),
             Action::Take => self.handle_take(),
@@ -518,7 +522,7 @@ impl GameLogic for Game {
             Action::Defend(card) => self.handle_defense(card),
         }
 
-        &self.game_state
+        Ok(())
     }
 
     fn get_actions(&self) -> Vec<Action> {
@@ -593,18 +597,24 @@ fn run_game() -> (f32, f32) {
         //println!("Actions: {:?}", actions);
         let action = player.choose_action(game.game_state.observe(pta), actions, history);
         //println!("Action: {:?}", action);
-        game.step(action);
+        'step_loop: loop {
+            match game.step(action) {
+                Ok(_) => break 'step_loop,
+                Err(e) => {
+                    println!("Error: {}", e);
+                }
+            };
+        }
         //println!("Gamestate: {:?}", *game_state);
         game_over = game.is_over();
     }
-    let rewards = game.get_rewards();
+    game.get_rewards()
     // println!("Rewards: {:?}", rewards);
-    rewards
 }
 
 fn main() {
     use rayon::prelude::*;
-    let num_games = 100000;
+    let num_games = 10000;
     let range = 0..num_games;
     let results = range
         .into_par_iter()
