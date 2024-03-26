@@ -1,4 +1,4 @@
-from durak_rt.rust import get_a_state, Card, GameEnv
+from durak_rt.rust import Card, GameEnv
 import numpy as np
 
 class RandomPlayer:

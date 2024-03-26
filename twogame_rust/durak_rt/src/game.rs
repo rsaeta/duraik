@@ -217,6 +217,7 @@ pub_struct!(ObservableGameState {
     defender_has_taken: bool,
     acting_player: GamePlayer,
     defender: GamePlayer,
+    cards_in_opponent: u8,
 });
 
 impl GameState {
@@ -235,6 +236,10 @@ impl GameState {
             defender_has_taken: self.defender_has_taken,
             acting_player: self.acting_player.clone(),
             defender: self.defending_player.clone(),
+            cards_in_opponent: match player {
+                GamePlayer::Player1 => self.hand2.0.len() as u8,
+                GamePlayer::Player2 => self.hand1.0.len() as u8,
+            },
         }
     }
 
