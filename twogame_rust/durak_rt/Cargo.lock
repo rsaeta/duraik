@@ -52,6 +52,7 @@ dependencies = [
  "pyo3",
  "queues",
  "rand",
+ "rand_chacha",
  "rayon",
 ]
 
