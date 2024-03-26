@@ -1,6 +1,6 @@
 mod game;
-use crate::game::run_game;
 
+use crate::game::game::run_game;
 fn main() {
     use rayon::prelude::*;
     let num_games = 10000;

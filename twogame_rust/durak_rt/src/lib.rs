@@ -1,14 +1,9 @@
-use game::Action;
-use game::Card;
-use game::GameLogic;
-use game::GamePlayer;
-use game::Player;
+use game::{
+    cards::{self, Card},
+    game::{Action, Game, GameLogic, GamePlayer, ObservableGameState, Player, RandomPlayer},
+};
 use pyo3::prelude::*;
 mod game;
-
-use crate::game::Game;
-use crate::game::ObservableGameState;
-use crate::game::RandomPlayer;
 
 #[pyclass(name = "Card")]
 #[derive(Clone)]
@@ -175,10 +170,10 @@ impl From<Card> for CardPy {
     fn from(card: Card) -> Self {
         CardPy {
             suit: match card.suit {
-                game::Suit::Spades => "S".to_string(),
-                game::Suit::Hearts => "H".to_string(),
-                game::Suit::Clubs => "C".to_string(),
-                game::Suit::Diamonds => "D".to_string(),
+                cards::Suit::Spades => "S".to_string(),
+                cards::Suit::Hearts => "H".to_string(),
+                cards::Suit::Clubs => "C".to_string(),
+                cards::Suit::Diamonds => "D".to_string(),
             },
             rank: card.rank,
         }
