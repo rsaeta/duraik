@@ -12,7 +12,6 @@ class RandomPlayer:
         choice = self.np_random.choice(len(actions))
         print(f"Chose action: {actions[choice]}")
         return choice
-    
 
 class HumanPlayer:
     def choose_action(self, state, actions, full_state=None):
