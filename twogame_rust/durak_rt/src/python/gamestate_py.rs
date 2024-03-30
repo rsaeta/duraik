@@ -2,7 +2,7 @@ use numpy::ndarray::concatenate;
 use numpy::PyArray1;
 use numpy::{ndarray::Array1, Ix1, PyArray};
 use pyo3::exceptions::PyException;
-use pyo3::{methods, pyclass, pymethods, PyErr, PyResult, Python};
+use pyo3::{pyclass, pymethods, PyErr, PyResult, Python};
 
 use super::card_py::{CardPy, HandPy};
 use super::utils::indices_to_bitmap_as_array1;

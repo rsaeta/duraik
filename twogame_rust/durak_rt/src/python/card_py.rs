@@ -3,7 +3,7 @@ use pyo3::{pyclass, pymethods, PyResult};
 
 use crate::game::cards::{self, Card};
 
-use super::utils::{indices_to_bitmap, indices_to_bitmap_as_array1};
+use super::utils::indices_to_bitmap;
 
 #[pyclass(name = "Card")]
 #[derive(Clone)]
