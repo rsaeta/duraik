@@ -2,7 +2,10 @@ use core::fmt;
 use rand::{thread_rng, Rng, RngCore};
 use std::{collections::HashSet, vec};
 
-use super::cards::{Card, Deck, Suit};
+use super::{
+    actions::Action,
+    cards::{Card, Deck, Suit},
+};
 
 macro_rules! pub_struct {
   ($name:ident {$($field:ident: $t:ty,)*}) => {
@@ -357,12 +360,12 @@ impl Game {
         }
     }
 
-    fn ranks(&self, game_state: &GameState) -> HashSet<u8> {
+    fn ranks(&self) -> HashSet<u8> {
         let mut ranks = HashSet::new();
-        for card in game_state.attack_table.iter() {
+        for card in self.game_state.attack_table.iter() {
             ranks.insert(card.rank);
         }
-        for card in game_state.defense_table.iter() {
+        for card in self.game_state.defense_table.iter() {
             ranks.insert(card.rank);
         }
         ranks
@@ -370,21 +373,28 @@ impl Game {
 
     fn legal_attacks(&self) -> Vec<Action> {
         let mut actions = Vec::new();
-        if self.game_state.attack_table.len() == 0 {
-            for card in self.attacker_hand().0.iter() {
-                actions.push(Action::Attack(card.clone()));
+        match self.game_state.attack_table.len() {
+            0 => self
+                .attacker_hand()
+                .0
+                .iter()
+                .map(|card| Action::Attack(*card))
+                .collect(),
+            _ => {
+                let ranks = self.ranks();
+                actions.push(Action::StopAttack);
+                actions.append(
+                    &mut self
+                        .attacker_hand()
+                        .0
+                        .iter()
+                        .filter(|card| ranks.contains(&card.rank))
+                        .map(|card| Action::Attack(*card))
+                        .collect(),
+                );
+                actions
             }
-        } else {
-            let ranks = self.ranks(&self.game_state);
-            for card in self.attacker_hand().0.iter() {
-                if ranks.contains(&card.rank) {
-                    actions.push(Action::Attack(card.clone()));
-                }
-            }
-            actions.push(Action::StopAttack);
         }
-
-        actions
     }
 
     fn legal_defenses(&self) -> Vec<Action> {
@@ -460,14 +470,6 @@ impl Game {
         }
         Ok(self.get_rewards())
     }
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub enum Action {
-    StopAttack,
-    Take,
-    Attack(Card),
-    Defend(Card),
 }
 
 pub trait GameLogic {

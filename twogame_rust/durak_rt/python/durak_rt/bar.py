@@ -1,19 +1,19 @@
-from durak_rt.rust import Card, GameEnv
+from wrapper import GamePlayer, GameEnv
 import numpy as np
 
-class RandomPlayer:
-    def __init__(self, player_id):
-        self.player_id = player_id
+class RandomPlayer(GamePlayer):
+    def __init__(self):
         self.np_random = np.random.RandomState()
 
     def choose_action(self, state, actions, full_state=None):
         print(f"Actions: {actions}")
         print(f"State: {state}")
+        breakpoint()
         choice = self.np_random.choice(len(actions))
         print(f"Chose action: {actions[choice]}")
         return choice
 
-class HumanPlayer:
+class HumanPlayer(GamePlayer):
     def choose_action(self, state, actions, full_state=None):
         print("State:")
         print(state)
@@ -29,5 +29,6 @@ class HumanPlayer:
                 print("Invalid action {}".format(action))
         return actions.index(sorted_actions[action])
 
-GameEnv(HumanPlayer()).play()
+env = GameEnv(RandomPlayer())
+env.play()
 breakpoint()

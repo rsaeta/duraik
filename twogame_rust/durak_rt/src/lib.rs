@@ -1,8 +1,9 @@
 use game::{
+    actions::Action,
     cards::{self, Card},
-    game::{Action, Game, GameLogic, GamePlayer, ObservableGameState, Player, RandomPlayer},
+    game::{Game, GameLogic, GamePlayer, ObservableGameState, Player, RandomPlayer},
 };
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyException, prelude::*};
 mod game;
 
 #[pyclass(name = "Card")]
@@ -13,6 +14,7 @@ pub struct CardPy {
     #[pyo3(get)]
     pub rank: u8,
 }
+
 #[pymethods]
 impl CardPy {
     #[new]
@@ -40,6 +42,34 @@ impl CardPy {
             _ => self.rank.to_string(),
         };
         Ok(format!("{}{}", rank_str, self.suit))
+    }
+}
+
+impl From<CardPy> for u8 {
+    fn from(value: CardPy) -> Self {
+        let suit = match value.suit.as_str() {
+            "\x1b[90m♠️\x1b[0m" => 0,
+            "\x1b[31m♥️\x1b[0m" => 1,
+            "\x1b[90m♣️\x1b[0m" => 2,
+            "\x1b[31m♦️\x1b[0m" => 3,
+            _ => 5,
+        };
+        (suit * 9) + value.rank - 6
+    }
+}
+
+impl From<u8> for CardPy {
+    fn from(value: u8) -> Self {
+        let suit_val = (value / 9) as u8;
+        let suit = match suit_val {
+            0 => "♠".to_string(),
+            1 => "♥".to_string(),
+            2 => "♦".to_string(),
+            3 => "♣".to_string(),
+            _ => panic!("Invalid suit number"),
+        };
+        let rank = (value % 9) + 6;
+        CardPy { suit, rank }
     }
 }
 
@@ -160,6 +190,47 @@ pub struct ObservableGameStatePy {
     pub cards_in_opp_hand: u8,
 }
 
+use numpy::{
+    ndarray::{concatenate, Array1},
+    Ix1, PyArray, PyArray1,
+};
+
+struct HandPy<'a>(&'a Vec<CardPy>);
+
+fn indices_to_bitmap(indices: Vec<usize>, total_size: usize) -> Vec<u8> {
+    let mut bitmap = vec![0; total_size];
+    for idx in indices {
+        bitmap[idx] = 1;
+    }
+    bitmap
+}
+
+fn indices_to_bitmap_as_array1(indices: Vec<usize>, total_size: usize) -> Array1<u8> {
+    let mut bitmap = Array1::zeros(total_size);
+    for idx in indices {
+        bitmap[idx] = 1;
+    }
+    bitmap
+}
+
+impl Into<Vec<u8>> for HandPy<'_> {
+    fn into(self) -> Vec<u8> {
+        indices_to_bitmap(
+            self.0
+                .iter()
+                .map(|card| <CardPy as Into<u8>>::into(<CardPy as Clone>::clone(&*card)) as usize)
+                .collect(),
+            36,
+        )
+    }
+}
+
+impl Into<Array1<u8>> for HandPy<'_> {
+    fn into(self) -> Array1<u8> {
+        Array1::from_vec(self.into())
+    }
+}
+
 #[pymethods]
 impl ObservableGameStatePy {
     pub fn __repr__(&self) -> PyResult<String> {
@@ -176,6 +247,39 @@ impl ObservableGameStatePy {
             self.acting_player, self.player_hand, self.attack_table, self.defense_table, self.deck_size, self.visible_card, self.defender_has_taken, self.defender, self.cards_in_opp_hand
         ))
     }
+
+    pub fn to_numpy(&self) -> PyResult<pyo3::Py<PyArray<u8, Ix1>>> {
+        let hand_arr = <HandPy as Into<Array1<u8>>>::into(HandPy(&self.player_hand));
+        let player_acting_arr = indices_to_bitmap_as_array1(vec![self.acting_player as usize], 2);
+        let attack_table_arr = <HandPy as Into<Array1<u8>>>::into(HandPy(&self.attack_table));
+        let defense_table_arr = <HandPy as Into<Array1<u8>>>::into(HandPy(&self.defense_table));
+        let visible_card_arr =
+            <HandPy as Into<Array1<u8>>>::into(HandPy(&vec![<CardPy as Clone>::clone(
+                &self.visible_card,
+            )]));
+        let defender_arr = indices_to_bitmap_as_array1(vec![self.defender as usize], 2);
+        let deck_size_arr = Array1::from_vec(vec![self.deck_size]);
+        let cards_in_opp_arr = Array1::from_vec(vec![self.cards_in_opp_hand]);
+        let res = match concatenate(
+            numpy::ndarray::Axis(0),
+            &[
+                hand_arr.view(),
+                player_acting_arr.view(),
+                attack_table_arr.view(),
+                defense_table_arr.view(),
+                visible_card_arr.view(),
+                defender_arr.view(),
+                deck_size_arr.view(),
+                cards_in_opp_arr.view(),
+            ],
+        ) {
+            Ok(a) => Ok(Python::with_gil(|py| {
+                PyArray1::from_array(py, &a).to_owned()
+            })),
+            Err(_) => Err(PyErr::new::<PyException, _>("Shape error")),
+        };
+        res
+    }
 }
 
 #[pyclass(name = "GamePlayer")]
@@ -188,10 +292,10 @@ impl From<Card> for CardPy {
     fn from(card: Card) -> Self {
         CardPy {
             suit: match card.suit {
-                cards::Suit::Spades => "♠️".to_string(),
-                cards::Suit::Hearts => "♥️".to_string(),
-                cards::Suit::Clubs => "♣️".to_string(),
-                cards::Suit::Diamonds => "♦️".to_string(),
+                cards::Suit::Spades => "\x1b[90m♠️\x1b[0m".to_string(),
+                cards::Suit::Hearts => "\x1b[31m♥️\x1b[0m".to_string(),
+                cards::Suit::Clubs => "\x1b[90m♣️\x1b[0m".to_string(),
+                cards::Suit::Diamonds => "\x1b[31m♦️\x1b[0m".to_string(),
             },
             rank: card.rank,
         }
@@ -269,5 +373,6 @@ impl From<&ObservableGameState> for ObservableGameStatePy {
 pub fn rust(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<CardPy>()?;
     m.add_class::<GameEnvPy>()?;
+    m.add_class::<ObservableGameStatePy>()?;
     Ok(())
 }
