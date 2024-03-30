@@ -1,4 +1,4 @@
-from .wrapper import GamePlayer, GameEnv
+from wrapper import GamePlayer, GameEnv
 import numpy as np
 
 
