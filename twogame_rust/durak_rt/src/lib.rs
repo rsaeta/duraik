@@ -258,18 +258,20 @@ impl ObservableGameStatePy {
                 &self.visible_card,
             )]));
         let defender_arr = indices_to_bitmap_as_array1(vec![self.defender as usize], 2);
+        let defender_has_taken_arr = Array1::from_vec(vec![self.defender_has_taken as u8]);
         let deck_size_arr = Array1::from_vec(vec![self.deck_size]);
         let cards_in_opp_arr = Array1::from_vec(vec![self.cards_in_opp_hand]);
         let res = match concatenate(
             numpy::ndarray::Axis(0),
             &[
-                hand_arr.view(),
                 player_acting_arr.view(),
+                hand_arr.view(),
                 attack_table_arr.view(),
                 defense_table_arr.view(),
-                visible_card_arr.view(),
-                defender_arr.view(),
                 deck_size_arr.view(),
+                visible_card_arr.view(),
+                defender_has_taken_arr.view(),
+                defender_arr.view(),
                 cards_in_opp_arr.view(),
             ],
         ) {
@@ -305,8 +307,8 @@ impl From<Card> for CardPy {
 impl From<GamePlayer> for u8 {
     fn from(player: GamePlayer) -> Self {
         match player {
-            GamePlayer::Player1 => 1,
-            GamePlayer::Player2 => 2,
+            GamePlayer::Player1 => 0,
+            GamePlayer::Player2 => 1,
         }
     }
 }
@@ -326,15 +328,15 @@ impl From<ObservableGameState> for ObservableGameStatePy {
             .collect();
         let visible_card = CardPy::from(state.visible_card);
         ObservableGameStatePy {
-            acting_player: u8::from(state.acting_player),
-            player_hand,
-            attack_table,
-            defense_table,
-            deck_size: state.num_cards_in_deck,
-            visible_card,
-            defender_has_taken: state.defender_has_taken,
-            defender: u8::from(state.defender),
-            cards_in_opp_hand: state.cards_in_opponent,
+            acting_player: u8::from(state.acting_player), // 2
+            player_hand,                                  // 36
+            attack_table,                                 // 36
+            defense_table,                                // 36
+            deck_size: state.num_cards_in_deck,           // 1
+            visible_card,                                 // 36
+            defender_has_taken: state.defender_has_taken, // 1
+            defender: u8::from(state.defender),           // 2
+            cards_in_opp_hand: state.cards_in_opponent,   // 1
         }
     }
 }
