@@ -1,5 +1,6 @@
-from wrapper import GamePlayer, GameEnv
+from .wrapper import GamePlayer, GameEnv
 import numpy as np
+
 
 class RandomPlayer(GamePlayer):
     def __init__(self):
@@ -12,6 +13,7 @@ class RandomPlayer(GamePlayer):
         choice = self.np_random.choice(len(actions))
         print(f"Chose action: {actions[choice]}")
         return choice
+
 
 class HumanPlayer(GamePlayer):
     def choose_action(self, state, actions, full_state=None):
@@ -29,6 +31,7 @@ class HumanPlayer(GamePlayer):
                 print("Invalid action {}".format(action))
         return actions.index(sorted_actions[action])
 
+
 env = GameEnv(RandomPlayer())
-env.play()
+(a, b) = env.play()
 breakpoint()

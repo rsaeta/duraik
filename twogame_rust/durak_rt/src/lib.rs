@@ -3,6 +3,10 @@ use game::{
     cards::{self, Card},
     game::{Game, GameLogic, GamePlayer, ObservableGameState, Player, RandomPlayer},
 };
+use numpy::{
+    ndarray::{concatenate, Array1},
+    Ix1, PyArray, PyArray1,
+};
 use pyo3::{exceptions::PyException, prelude::*};
 mod game;
 
@@ -189,11 +193,6 @@ pub struct ObservableGameStatePy {
     #[pyo3(get)]
     pub cards_in_opp_hand: u8,
 }
-
-use numpy::{
-    ndarray::{concatenate, Array1},
-    Ix1, PyArray, PyArray1,
-};
 
 struct HandPy<'a>(&'a Vec<CardPy>);
 
