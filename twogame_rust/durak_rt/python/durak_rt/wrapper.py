@@ -4,7 +4,12 @@ and whatnot to the classes
 """
 from typing import List, Tuple
 import numpy as np
-from durak_rt.rust import Card as _Card, GameEnv as _GameEnv, ObservableGameState as _ObservableGameState
+from durak_rt.rust import (
+    Card as _Card, 
+    GameEnv as _GameEnv, 
+    ObservableGameState as _ObservableGameState,
+    ActionList as _ActionList
+)
 
 
 class Card:
@@ -85,8 +90,26 @@ class ObservableGameState:
         return self.state.to_numpy()
 
 
+class ActionList:
+    def __init__(self, action_list: _ActionList):
+        self.action_list = action_list
+
+    @property
+    def actions(self) -> List[str]:
+        """Returns the actions as a list of strings"""
+        return self.action_list.get_actions()
+
+    def to_indices(self) -> List[int]:
+        """Returns the actions as a list of indices"""
+        return self.action_list.to_indices()
+
+    def to_bitmap(self) -> List[int]:
+        """Returns the actions as a bitmap"""
+        return self.action_list.to_bitmap()
+
+
 class GamePlayer:
-    def choose_action(self, state: ObservableGameState, actions: List[str], history: List[ObservableGameState]) -> int:
+    def choose_action(self, state: ObservableGameState, actions: ActionList, history: List[ObservableGameState]) -> int:
         raise NotImplementedError("choose_action not implemented")
 
 
@@ -96,3 +119,15 @@ class GameEnv():
 
     def play(self) -> Tuple[float, float]:
         return self.env.play()
+    
+    @staticmethod
+    def state_shape() -> np.shape:
+        """Returns the shape of the game state as a numpy array"""
+        return _GameEnv.state_shape()
+    
+    @staticmethod
+    def num_actions() -> int:
+        """Returns the number of possible actions"""
+        return _GameEnv.num_actions()
+
+

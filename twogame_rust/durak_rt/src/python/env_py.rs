@@ -1,6 +1,11 @@
-use crate::game::game::{Game, GameLogic, GamePlayer, Player, RandomPlayer};
+use crate::game::actions::num_actions;
+use crate::game::game::{Game, GameLogic};
+use crate::game::gamestate::{GamePlayer, ObservableGameState};
+use crate::game::player::{Player, RandomPlayer};
 use crate::python::player_py::PyPlayer;
-use pyo3::{pyclass, pymethods, Py, PyAny, PyResult};
+use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, Python};
+
+use super::gamestate_py::ObservableGameStatePy;
 
 #[pyclass(name = "GameEnv", unsendable)]
 pub struct GameEnvPy {
@@ -26,6 +31,20 @@ impl GameEnvPy {
             game: Box::new(Game::new()),
             player1: Box::new(PyPlayer(player1)),
         }
+    }
+
+    #[staticmethod]
+    pub fn num_actions() -> u8 {
+        num_actions()
+    }
+
+    #[staticmethod]
+    pub fn state_shape() -> PyResult<Py<PyAny>> {
+        let game = Game::new();
+        let state = <ObservableGameState as Into<ObservableGameStatePy>>::into(
+            game.game_state.observe(GamePlayer::Player1),
+        );
+        Python::with_gil(|py| state.to_numpy().unwrap().getattr(py, "shape"))
     }
 
     pub fn play(&mut self) -> PyResult<(f32, f32)> {

@@ -85,8 +85,30 @@ impl fmt::Debug for Card {
 }
 
 #[derive(Clone)]
+pub struct Hand(pub Vec<Card>);
+
+impl PartialEq for Hand {
+    fn eq(&self, other: &Self) -> bool {
+        let mut sorted_self = self.0.clone();
+        let mut sorted_other = other.0.clone();
+        sorted_self.sort();
+        sorted_other.sort();
+        sorted_self == sorted_other
+    }
+}
+
+impl fmt::Debug for Hand {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // sort based on suit then rank
+        let mut sorted_hand = self.0.clone();
+        sorted_hand.sort();
+        write!(f, "{:?}", sorted_hand)
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct Deck {
-    pub cards: Vec<Card>,
+    cards: Vec<Card>,
 }
 
 impl fmt::Debug for Deck {
@@ -109,6 +131,10 @@ impl Deck {
         Deck { cards: cards }
     }
 
+    pub fn len(&self) -> usize {
+        self.cards.len()
+    }
+
     pub fn shuffle(&mut self) {
         let mut rng = rand::thread_rng();
         self.cards.shuffle(&mut rng);
@@ -118,7 +144,7 @@ impl Deck {
         self.cards.pop()
     }
 
-    pub fn draw_n(&mut self, n: u8) -> Vec<Card> {
+    pub fn draw_n(&mut self, n: usize) -> Vec<Card> {
         let mut drawn = Vec::new();
         for _ in 0..n {
             match self.draw() {

@@ -4,9 +4,10 @@ use numpy::{ndarray::Array1, Ix1, PyArray};
 use pyo3::exceptions::PyException;
 use pyo3::{pyclass, pymethods, PyErr, PyResult, Python};
 
+use crate::game::gamestate::{GamePlayer, ObservableGameState};
+
 use super::card_py::{CardPy, HandPy};
 use super::utils::indices_to_bitmap_as_array1;
-use crate::game::game::{GamePlayer, ObservableGameState};
 
 #[pyclass(name = "ObservableGameState")]
 pub struct ObservableGameStatePy {
@@ -132,7 +133,7 @@ impl ObservableGameStatePy {
         let defender_has_taken_arr = Array1::from_vec(vec![self.defender_has_taken as u8]);
         let deck_size_arr = Array1::from_vec(vec![self.deck_size]);
         let cards_in_opp_arr = Array1::from_vec(vec![self.cards_in_opp_hand]);
-        let res = match concatenate(
+        match concatenate(
             numpy::ndarray::Axis(0),
             &[
                 player_acting_arr.view(),
@@ -150,7 +151,6 @@ impl ObservableGameStatePy {
                 PyArray1::from_array(py, &a).to_owned()
             })),
             Err(_) => Err(PyErr::new::<PyException, _>("Shape error")),
-        };
-        res
+        }
     }
 }

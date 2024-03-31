@@ -1,188 +1,11 @@
-use core::fmt;
-use rand::{thread_rng, Rng, RngCore};
 use std::{collections::HashSet, vec};
 
 use super::{
-    actions::Action,
-    cards::{Card, Deck, Suit},
+    actions::{Action, ActionList},
+    cards::{Card, Deck, Hand, Suit},
+    gamestate::{GamePlayer, GameState},
+    player::{Player, RandomPlayer},
 };
-
-macro_rules! pub_struct {
-  ($name:ident {$($field:ident: $t:ty,)*}) => {
-      #[derive(Debug, Clone, PartialEq)] // ewww
-      pub struct $name {
-          $(pub $field: $t),*
-      }
-  }
-}
-
-pub trait Player {
-    fn choose_action(
-        &mut self,
-        game_state: ObservableGameState,
-        actions: Vec<Action>,
-        history: Vec<ObservableGameState>,
-    ) -> Action;
-}
-
-pub struct RandomPlayer {
-    rng: Box<dyn RngCore>,
-}
-
-impl RandomPlayer {
-    pub fn new(_rng: Option<Box<dyn RngCore>>) -> RandomPlayer {
-        match _rng {
-            Some(rng) => RandomPlayer { rng },
-            None => RandomPlayer {
-                rng: Box::new(thread_rng()),
-            },
-        }
-    }
-}
-
-impl Player for RandomPlayer {
-    fn choose_action(
-        &mut self,
-        _state: ObservableGameState,
-        actions: Vec<Action>,
-        _history: Vec<ObservableGameState>,
-    ) -> Action {
-        let choice = match actions.len() {
-            0 => panic!("No actions available"),
-            1 => 0,
-            _ => self.rng.gen_range(0..actions.len()),
-        };
-        actions[choice]
-    }
-}
-
-#[derive(Clone)]
-pub struct Hand(pub Vec<Card>);
-
-impl PartialEq for Hand {
-    fn eq(&self, other: &Self) -> bool {
-        let mut sorted_self = self.0.clone();
-        let mut sorted_other = other.0.clone();
-        sorted_self.sort();
-        sorted_other.sort();
-        sorted_self == sorted_other
-    }
-}
-
-impl fmt::Debug for Hand {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // sort based on suit then rank
-        let mut sorted_hand = self.0.clone();
-        sorted_hand.sort();
-        write!(f, "{:?}", sorted_hand)
-    }
-}
-
-#[derive(Clone)]
-pub struct GameState {
-    deck: Deck,
-    attack_table: Vec<Card>,
-    defense_table: Vec<Card>,
-    hand1: Hand,
-    hand2: Hand,
-    pub acting_player: GamePlayer,
-    defending_player: GamePlayer,
-    visible_card: Card,
-    defender_has_taken: bool,
-    graveyard: Vec<Card>,
-}
-
-impl fmt::Debug for GameState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{{\n\tDeck: {:?}\n\tAttack: {:?}\n\tDefense: {:?}\n\tHand1: {:?}\n\tHand2: {:?}\n\tActing: {:?}\n\tDefending: {:?}\n\tVisible: {:?}\n\tDefender has taken: {}\n\tGraveyard: {:?}\n}}",
-            self.deck,
-            self.attack_table,
-            self.defense_table,
-            self.hand1,
-            self.hand2,
-            self.acting_player,
-            self.defending_player,
-            self.visible_card,
-            self.defender_has_taken,
-            self.graveyard,
-        )
-    }
-}
-
-#[derive(Clone, PartialEq, Copy, Debug)]
-pub enum GamePlayer {
-    Player1,
-    Player2,
-}
-
-impl GamePlayer {
-    fn other(&self) -> GamePlayer {
-        match self {
-            GamePlayer::Player1 => GamePlayer::Player2,
-            GamePlayer::Player2 => GamePlayer::Player1,
-        }
-    }
-}
-
-// ignore unused variable for now
-pub_struct!(ObservableGameState {
-    player: GamePlayer,
-    num_cards_in_deck: u8,
-    attack_table: Vec<Card>,
-    defense_table: Vec<Card>,
-    hand: Hand,
-    visible_card: Card,
-    defender_has_taken: bool,
-    acting_player: GamePlayer,
-    defender: GamePlayer,
-    cards_in_opponent: u8,
-});
-
-impl GameState {
-    pub fn observe(&self, player: GamePlayer) -> ObservableGameState {
-        let hand = match player {
-            GamePlayer::Player1 => self.hand1.clone(),
-            GamePlayer::Player2 => self.hand2.clone(),
-        };
-        ObservableGameState {
-            player,
-            num_cards_in_deck: self.deck.cards.len() as u8,
-            attack_table: self.attack_table.clone(),
-            defense_table: self.defense_table.clone(),
-            hand,
-            visible_card: self.visible_card.clone(),
-            defender_has_taken: self.defender_has_taken,
-            acting_player: self.acting_player.clone(),
-            defender: self.defending_player.clone(),
-            cards_in_opponent: match player {
-                GamePlayer::Player1 => self.hand2.0.len() as u8,
-                GamePlayer::Player2 => self.hand1.0.len() as u8,
-            },
-        }
-    }
-
-    fn num_undefended(&self) -> u8 {
-        let num_attack = self.attack_table.len() as u8;
-        let num_defend = self.defense_table.len() as u8;
-        num_attack - num_defend
-    }
-
-    fn _defender_hand(&self) -> &Hand {
-        match self.defending_player {
-            GamePlayer::Player1 => &self.hand1,
-            GamePlayer::Player2 => &self.hand2,
-        }
-    }
-
-    fn _attacker_hand(&self) -> &Hand {
-        match self.defending_player.other() {
-            GamePlayer::Player1 => &self.hand1,
-            GamePlayer::Player2 => &self.hand2,
-        }
-    }
-}
 
 pub struct Game {
     pub history: Vec<GameState>,
@@ -217,18 +40,18 @@ impl Game {
         let hand2 = Hand(deck.draw_n(6));
         let visible_card = deck.get_first().unwrap();
         let first_attacker = det_first_attacker(&hand1, &hand2, visible_card.suit);
-        let game_state = GameState {
+        let game_state = GameState::new(
             deck,
+            Vec::new(),
+            Vec::new(),
             hand1,
             hand2,
-            attack_table: Vec::new(),
-            defense_table: Vec::new(),
-            acting_player: first_attacker,
-            defending_player: first_attacker.other(),
+            first_attacker,
+            first_attacker.other(),
             visible_card,
-            defender_has_taken: false,
-            graveyard: Vec::new(),
-        };
+            false,
+            Vec::new(),
+        );
 
         Game {
             game_state,
@@ -257,6 +80,8 @@ impl Game {
         }
     }
 
+    /// This function should be called after a round of the game has ended and the cards on the table have been added to the defender's hand.
+    /// It refills the hands of the players up to 6 cards, starting with the player who will be attacking in the next round.
     fn refill_hands(&mut self) {
         let refill_order = match self.game_state.defending_player {
             GamePlayer::Player2 => vec![GamePlayer::Player1, GamePlayer::Player2],
@@ -267,9 +92,9 @@ impl Game {
                 GamePlayer::Player1 => &mut self.game_state.hand1,
                 GamePlayer::Player2 => &mut self.game_state.hand2,
             };
-            let num_cards = 6 - hand.0.len() as i8;
+            let num_cards = 6 - hand.0.len();
             if num_cards > 0 {
-                let mut new_cards = self.game_state.deck.draw_n(num_cards as u8);
+                let mut new_cards = self.game_state.deck.draw_n(num_cards);
                 hand.0.append(&mut new_cards);
             }
         }
@@ -317,18 +142,28 @@ impl Game {
         }
     }
 
+    // Function to handle the stop attack action
     fn handle_stop_attack(&mut self) {
+        // If the defender has taken the cards
         if self.game_state.defender_has_taken {
+            // Add the table cards to the defender's hand
             self.add_table_to_defender();
+            // Refill the hands of the players
             self.refill_hands();
         } else {
+            // If there are no undefended cards on the table
             if self.game_state.num_undefended() == 0 {
+                // Clear the table
                 self.clear_table();
+                // Switch the defending player
                 self.game_state.defending_player = self.game_state.defending_player.other();
+                // Refill the hands of the players
                 self.refill_hands();
             }
+            // Switch the acting player
             self.game_state.acting_player = self.game_state.acting_player.other();
         }
+        // Reset the flag indicating that the defender has taken the cards
         self.game_state.defender_has_taken = false;
     }
 
@@ -340,22 +175,35 @@ impl Game {
         hand.0.remove(index);
     }
 
+    // Function to handle the defense action
     fn handle_defense(&mut self, card: Card) {
+        // Add the card to the defense table
         self.game_state.defense_table.push(card);
         {
+            // Determine the hand of the defending player
             let hand = match self.game_state.defending_player {
                 GamePlayer::Player1 => &mut self.game_state.hand1,
                 GamePlayer::Player2 => &mut self.game_state.hand2,
             };
+            // Find the position of the card in the hand
             let index = hand.0.iter().position(|x| *x == card).unwrap();
+            // Remove the card from the hand
             hand.0.remove(index);
         }
+        // If the defense table is full or the defender has no cards left
         if self.game_state.defense_table.len() == 6 || self.defender_hand().0.len() == 0 {
+            // Clear the table
             self.clear_table();
+            // Refill the hands of the players
             self.refill_hands();
+            // Reset the flag indicating that the defender has taken the cards
             self.game_state.defender_has_taken = false;
+            // Switch the defending player
             self.game_state.defending_player = self.game_state.defending_player.other();
-        } else if self.game_state.num_undefended() == 0 {
+        }
+        // If there are no undefended cards on the table
+        else if self.game_state.num_undefended() == 0 {
+            // Switch the acting player
             self.game_state.acting_player = self.game_state.acting_player.other();
         }
     }
@@ -371,41 +219,60 @@ impl Game {
         ranks
     }
 
+    // This function determines the legal attack actions for the current game state
     fn legal_attacks(&self) -> Vec<Action> {
+        // Initialize an empty vector to store the actions
         let mut actions = Vec::new();
+        // Check the length of the attack table
         match self.game_state.attack_table.len() {
+            // If the attack table is empty, all cards in the attacker's hand are legal attacks
             0 => self
                 .attacker_hand()
                 .0
                 .iter()
+                // Map each card in the attacker's hand to an Attack action
                 .map(|card| Action::Attack(*card))
                 .collect(),
+            // If the attack table is not empty
             _ => {
+                // Get the ranks of the cards on the table
                 let ranks = self.ranks();
+                // Add the StopAttack action to the list of actions
                 actions.push(Action::StopAttack);
+                // Append the legal attack actions to the list of actions
                 actions.append(
                     &mut self
                         .attacker_hand()
                         .0
                         .iter()
+                        // Filter the cards in the attacker's hand that have the same rank as the cards on the table
                         .filter(|card| ranks.contains(&card.rank))
+                        // Map each card to an Attack action
                         .map(|card| Action::Attack(*card))
                         .collect(),
                 );
+                // Return the list of actions
                 actions
             }
         }
     }
 
+    // This function determines the legal defense actions for the current game state
     fn legal_defenses(&self) -> Vec<Action> {
+        // Initialize an empty vector to store the actions
         let mut actions = Vec::new();
+        // Add the Take action to the list of actions
         actions.push(Action::Take);
+        // Get the last attack from the attack table
         let last_attack = self.game_state.attack_table[self.game_state.defense_table.len()];
+        // Get the suit of the visible card
         let tsuit = self.game_state.visible_card.suit;
+        // Initialize a vector to store the defense actions
         let mut defenses = self
             .defender_hand()
             .0
             .iter()
+            // Filter the cards in the defender's hand that can legally defend against the last attack
             .filter(|card| match last_attack {
                 Card {
                     suit: a_suit,
@@ -427,20 +294,25 @@ impl Game {
                     } => (*d_suit == tsuit) || (*d_suit == a_suit && *d_rank > a_rank),
                 },
             })
+            // Map each card to a Defend action
             .map(|i| Action::Defend(*i))
+            // Collect the defense actions into a vector
             .collect::<Vec<Action>>();
+        // Append the defense actions to the list of actions
         actions.append(&mut defenses);
+        // Return the list of actions
         actions
     }
 
-    pub fn legal_actions(&self) -> Vec<Action> {
-        match (
+    pub fn legal_actions(&self) -> ActionList {
+        let actions = match (
             self.game_state.acting_player,
             self.game_state.defending_player,
         ) {
             (a, b) if a == b => self.legal_defenses(),
             _ => self.legal_attacks(),
-        }
+        };
+        ActionList(actions)
     }
 
     pub fn play(
@@ -474,7 +346,7 @@ impl Game {
 
 pub trait GameLogic {
     fn step(&mut self, action: Action) -> Result<(), &str>;
-    fn get_actions(&self) -> Vec<Action>;
+    fn get_actions(&self) -> ActionList;
     fn get_winner(&self) -> Option<GamePlayer>;
     fn get_rewards(&self) -> (f32, f32);
     fn is_over(&self) -> bool;
@@ -485,7 +357,7 @@ impl GameLogic for Game {
         let current_state = self.game_state.clone();
         self.history.push(current_state);
         let legal_actions = self.legal_actions();
-        if !legal_actions.contains(&action) {
+        if !legal_actions.0.contains(&action) {
             return Err("Illegal action");
         }
         match action {
@@ -498,19 +370,16 @@ impl GameLogic for Game {
         Ok(())
     }
 
-    fn get_actions(&self) -> Vec<Action> {
+    fn get_actions(&self) -> ActionList {
         self.legal_actions()
     }
 
     fn get_winner(&self) -> Option<GamePlayer> {
         let sizes = vec![
-            &self.game_state.hand1.0,
-            &self.game_state.hand2.0,
-            &self.game_state.deck.cards,
-        ]
-        .iter()
-        .map(|x| x.len())
-        .collect::<Vec<usize>>();
+            self.game_state.hand1.0.len(),
+            self.game_state.hand2.0.len(),
+            self.game_state.deck.len(),
+        ];
         match sizes.as_slice() {
             [_, _, 1..=52] => None,
             [0, 0, 0] => None,
@@ -531,13 +400,10 @@ impl GameLogic for Game {
 
     fn is_over(&self) -> bool {
         let sizes = vec![
-            &self.game_state.hand1.0,
-            &self.game_state.hand2.0,
-            &self.game_state.deck.cards,
-        ]
-        .iter()
-        .map(|x| x.len())
-        .collect::<Vec<usize>>();
+            self.game_state.hand1.0.len(),
+            self.game_state.hand2.0.len(),
+            self.game_state.deck.len(),
+        ];
         match sizes.as_slice() {
             [_, _, 1..=52] => false,
             [0, 0, 0] => true,
